@@ -1,17 +1,71 @@
-
+/// <reference lib="dom" />
 "use client";
 
 import React, { useState, useTransition, useEffect } from 'react';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
+import { z } from 'zod'; // Added missing import
+
+// Import SpeechRecognition type (for TypeScript recognition)
+declare global {
+  interface Window {
+    SpeechRecognition: typeof SpeechRecognition;
+    webkitSpeechRecognition: typeof SpeechRecognition;
+  }
+}
+
+// Define SpeechRecognition interface if not available
+interface SpeechRecognition extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start(): void;
+  stop(): void;
+  abort(): void;
+  onstart: ((this: SpeechRecognition, ev: Event) => any) | null;
+  onend: ((this: SpeechRecognition, ev: Event) => any) | null;
+  onerror: ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => any) | null;
+  onresult: ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => any) | null;
+  onspeechend: ((this: SpeechRecognition, ev: Event) => any) | null;
+}
+
+interface SpeechRecognitionErrorEvent extends Event {
+  error: string;
+}
+
+interface SpeechRecognitionEvent extends Event {
+  results: SpeechRecognitionResultList;
+}
+
+interface SpeechRecognitionResultList {
+  readonly length: number;
+  item(index: number): SpeechRecognitionResult;
+  [index: number]: SpeechRecognitionResult;
+}
+
+interface SpeechRecognitionResult {
+  readonly length: number;
+  item(index: number): SpeechRecognitionAlternative;
+  [index: number]: SpeechRecognitionAlternative;
+}
+
+interface SpeechRecognitionAlternative {
+  readonly transcript: string;
+  readonly confidence: number;
+}
+
+declare var SpeechRecognition: {
+  prototype: SpeechRecognition;
+  new(): SpeechRecognition;
+};
+
 import { aiCropAdvisor, type AICropAdvisorInput, type AICropAdvisorOutput } from '@/ai/flows/ai-crop-advisor';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Wand2, AlertCircle, CheckCircle } from 'lucide-react';
+import { Loader2, Wand2, AlertCircle, CheckCircle, Mic, StopCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useTranslation } from 'react-i18next';
@@ -32,16 +86,35 @@ interface AICropAdvisorSectionProps {
   initialMarketSummary?: string;
 }
 
+// Helper function to get language code based on region (moved outside component)
+const getLanguageCode = (region: string): string => {
+  const lowerRegion = region.toLowerCase();
+  if (lowerRegion.includes('india') || lowerRegion.includes('hindi')) return 'hi-IN';
+  if (lowerRegion.includes('spain') || lowerRegion.includes('spanish')) return 'es-ES';
+  if (lowerRegion.includes('telugu')) return 'te-IN';
+  return 'en-US'; // Default to English
+};
+
 export default function AICropAdvisorSection({
   initialRegion,
   initialWeatherSummary,
   initialMarketSummary,
 }: AICropAdvisorSectionProps) {
   const { t } = useTranslation();
+  
+  // Fallback function for translations
+  const getTranslation = (key: string, fallback: string) => {
+    const translation = t(key);
+    return translation === key ? fallback : translation;
+  };
   const [isPending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null); // This error state is for AI flow errors, not form validation
+  const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AICropAdvisorOutput | null>(null);
   const { toast } = useToast();
+
+  // State for speech recognition
+  const [isListening, setIsListening] = useState(false);
+  const [speechRecognition, setSpeechRecognition] = useState<SpeechRecognition | null>(null);
 
   const form = useForm<AICropAdvisorFormValues>({
     resolver: zodResolver(AICropAdvisorInputClientSchema),
@@ -66,6 +139,116 @@ export default function AICropAdvisorSection({
     if (initialMarketSummary) form.setValue('marketData', initialMarketSummary, { shouldValidate: true });
   }, [initialMarketSummary, form]);
 
+  // Initialize speech recognition
+  useEffect(() => {
+    const SpeechRecognitionClass = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (SpeechRecognitionClass) {
+      const recognition = new SpeechRecognitionClass();
+      // Set language based on the region if it's not coordinates, otherwise default to English
+      const region = form.getValues('region');
+      recognition.lang = region && !region.startsWith('Lat:') ? getLanguageCode(region) : 'en-US';
+      recognition.interimResults = true;
+      recognition.continuous = false;
+
+      recognition.onstart = () => {
+        setIsListening(true);
+        console.log('Speech recognition started');
+      };
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        form.setValue('cropHistory', transcript, { shouldValidate: true });
+        console.log('Recognized text:', transcript);
+      };
+
+      recognition.onspeechend = () => {
+        setIsListening(false);
+        console.log('Speech ended');
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+        console.log('Speech recognition ended');
+      };
+
+      recognition.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+        setIsListening(false);
+        
+        let errorMessage = event.error;
+        let errorTitle = t('speechRecognitionErrorTitle') || 'Speech Recognition Error';
+        
+        // Handle specific error types
+        switch (event.error) {
+          case 'network':
+            errorMessage = 'Network connection failed. Please check your internet connection and try again.';
+            break;
+          case 'not-allowed':
+            errorMessage = 'Microphone access denied. Please allow microphone permissions and try again.';
+            break;
+          case 'no-speech':
+            errorMessage = 'No speech detected. Please try speaking again.';
+            break;
+          case 'audio-capture':
+            errorMessage = 'Audio capture failed. Please check your microphone and try again.';
+            break;
+          case 'service-not-allowed':
+            errorMessage = 'Speech recognition service not available. Please try again later.';
+            break;
+          default:
+            errorMessage = `Speech recognition error: ${event.error}`;
+        }
+        
+        toast({
+          title: errorTitle,
+          description: errorMessage,
+          variant: "destructive",
+        });
+      };
+
+      setSpeechRecognition(recognition);
+
+      // Clean up
+      return () => {
+        if (recognition) {
+          recognition.abort();
+        }
+      };
+    } else {
+      console.warn('Speech recognition not supported in this browser.');
+    }
+  }, [form, toast, t]);
+
+  const toggleListening = () => {
+    if (speechRecognition) {
+      if (isListening) {
+        speechRecognition.stop();
+      } else {
+        // Check if browser supports speech recognition and has network connectivity
+        if (!navigator.onLine) {
+          toast({
+            title: 'Network Error',
+            description: 'Please check your internet connection and try again.',
+            variant: "destructive",
+          });
+          return;
+        }
+        
+        try {
+          form.setValue('cropHistory', '', { shouldValidate: true }); // Clear before starting
+          speechRecognition.start();
+        } catch (error) {
+          console.error('Failed to start speech recognition:', error);
+          toast({
+            title: 'Speech Recognition Error',
+            description: 'Failed to start speech recognition. Please try again.',
+            variant: "destructive",
+          });
+        }
+      }
+    }
+  };
 
   const onSubmit: SubmitHandler<AICropAdvisorFormValues> = (data) => {
     setError(null);
@@ -73,24 +256,24 @@ export default function AICropAdvisorSection({
     startTransition(async () => {
       try {
         const flowInput: AICropAdvisorInput = {
-            soilType: data.soilType,
-            region: data.region,
-            cropHistory: data.cropHistory,
-            weatherData: data.weatherData,
-            marketData: data.marketData,
+          soilType: data.soilType,
+          region: data.region,
+          cropHistory: data.cropHistory,
+          weatherData: data.weatherData,
+          marketData: data.marketData,
         };
         const response = await aiCropAdvisor(flowInput);
         setResult(response);
         toast({
-          title: t('aiAdvisorSuccessToastTitle'),
-          description: t('aiAdvisorSuccessToastDescription'),
+          title: getTranslation('aiAdvisorSuccessToastTitle', 'Success'),
+          description: getTranslation('aiAdvisorSuccessToastDescription', 'AI recommendations generated successfully'),
           variant: "default",
         });
       } catch (e) {
         const errorMessage = e instanceof Error ? e.message : 'An unknown error occurred.';
         setError(errorMessage);
         toast({
-          title: t('aiAdvisorErrorToastTitle'),
+          title: getTranslation('aiAdvisorErrorToastTitle', 'Error'),
           description: errorMessage,
           variant: "destructive",
         });
@@ -103,9 +286,9 @@ export default function AICropAdvisorSection({
       <CardHeader>
         <div className="flex items-center space-x-2">
           <Wand2 className="h-7 w-7 text-primary" />
-          <CardTitle className="text-xl font-semibold">{t('aiCropAdvisorCardTitle')}</CardTitle>
+          <CardTitle className="text-xl font-semibold">{getTranslation('aiCropAdvisorCardTitle', 'AI Crop Advisor')}</CardTitle>
         </div>
-        <CardDescription>{t('aiCropAdvisorCardDescription')}</CardDescription>
+        <CardDescription>{getTranslation('aiCropAdvisorCardDescription', 'Get AI-powered crop recommendations based on your farm data')}</CardDescription>
       </CardHeader>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)}>
@@ -116,9 +299,9 @@ export default function AICropAdvisorSection({
                 name="soilType"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{t('soilTypeLabel')}</FormLabel>
+                    <FormLabel>{getTranslation('soilTypeLabel', 'Soil Type')}</FormLabel>
                     <FormControl>
-                      <Input placeholder={t('soilTypePlaceholder')} {...field} />
+                      <Input placeholder={getTranslation('soilTypePlaceholder', 'e.g., Clay, Sandy, Loam')} {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -129,9 +312,9 @@ export default function AICropAdvisorSection({
                 name="region"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{t('regionCoordinatesLabel')}</FormLabel>
+                    <FormLabel>{getTranslation('regionCoordinatesLabel', 'Region/Coordinates')}</FormLabel>
                     <FormControl>
-                      <Input placeholder={t('regionCoordinatesPlaceholder')} {...field} />
+                      <Input placeholder={getTranslation('regionCoordinatesPlaceholder', 'e.g., Central Valley or Lat: 34.05, Lon: -118.24')} {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -143,10 +326,29 @@ export default function AICropAdvisorSection({
               name="cropHistory"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{t('cropHistoryLabel')}</FormLabel>
-                  <FormControl>
-                    <Textarea placeholder={t('cropHistoryPlaceholder')} {...field} rows={3} />
-                  </FormControl>
+                  <FormLabel>{getTranslation('cropHistoryLabel', 'Crop History')}</FormLabel>
+                  <div className="flex items-center space-x-2">
+                    <FormControl className="flex-grow">
+                      <Textarea 
+                        placeholder={isListening ? getTranslation('listeningPlaceholder', 'Listening...') : getTranslation('cropHistoryPlaceholder', 'Describe the crops grown on your farm in recent years')} 
+                        {...field} 
+                        rows={3} 
+                        disabled={isListening} 
+                      />
+                    </FormControl>
+                    {speechRecognition && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={toggleListening}
+                        disabled={isPending}
+                        title={isListening ? "Stop recording" : "Start voice input"}
+                      >
+                        {isListening ? <StopCircle className="h-5 w-5 text-red-500" /> : <Mic className="h-5 w-5" />}
+                      </Button>
+                    )}
+                  </div>
                   <FormMessage />
                 </FormItem>
               )}
@@ -156,9 +358,9 @@ export default function AICropAdvisorSection({
               name="weatherData"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{t('currentWeatherSummaryLabel')}</FormLabel>
+                  <FormLabel>{getTranslation('currentWeatherSummaryLabel', 'Current Weather Summary')}</FormLabel>
                   <FormControl>
-                    <Textarea placeholder={t('currentWeatherSummaryPlaceholder')} {...field} rows={3} />
+                    <Textarea placeholder={getTranslation('currentWeatherSummaryPlaceholder', 'Describe current weather conditions, rainfall, temperature')} {...field} rows={3} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -169,9 +371,9 @@ export default function AICropAdvisorSection({
               name="marketData"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{t('currentMarketDataSummaryLabel')}</FormLabel>
+                  <FormLabel>{getTranslation('currentMarketDataSummaryLabel', 'Current Market Data Summary')}</FormLabel>
                   <FormControl>
-                    <Textarea placeholder={t('currentMarketDataSummaryPlaceholder')} {...field} rows={3} />
+                    <Textarea placeholder={getTranslation('currentMarketDataSummaryPlaceholder', 'Describe current market trends, crop prices, demand')} {...field} rows={3} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -185,7 +387,7 @@ export default function AICropAdvisorSection({
               ) : (
                 <Wand2 className="mr-2 h-4 w-4" />
               )}
-              {t('getSuggestionsButton')}
+              {getTranslation('getSuggestionsButton', 'Get AI Suggestions')}
             </Button>
           </CardFooter>
         </form>
@@ -193,9 +395,11 @@ export default function AICropAdvisorSection({
 
       {error && (
         <CardContent className="mt-6 border-t pt-6">
-            <AlertCircle className="h-6 w-6 text-destructive mb-2" />
-            <h3 className="text-lg font-semibold text-destructive">{t('aiAdvisorErrorToastTitle')}</h3>
-            <p className="text-sm text-destructive">{error}</p>
+          <div className="flex items-center space-x-2 mb-2">
+            <AlertCircle className="h-6 w-6 text-destructive" />
+            <h3 className="text-lg font-semibold text-destructive">{getTranslation('aiAdvisorErrorToastTitle', 'Error')}</h3>
+          </div>
+          <p className="text-sm text-destructive">{error}</p>
         </CardContent>
       )}
 
@@ -203,12 +407,12 @@ export default function AICropAdvisorSection({
         <CardContent className="mt-6 border-t pt-6">
           <div className="flex items-center space-x-2 mb-4">
             <CheckCircle className="h-6 w-6 text-primary" />
-            <h3 className="text-lg font-semibold">{t('advisorsRecommendationsTitle')}</h3>
+            <h3 className="text-lg font-semibold">{getTranslation('advisorsRecommendationsTitle', 'AI Recommendations')}</h3>
           </div>
           <ScrollArea className="h-[200px] p-4 border rounded-md bg-secondary/30">
-            <h4 className="font-medium text-primary">{t('suggestedCropsLabel')}</h4>
+            <h4 className="font-medium text-primary">{getTranslation('suggestedCropsLabel', 'Suggested Crops')}</h4>
             <p className="whitespace-pre-wrap text-sm mb-3">{result.cropSuggestions}</p>
-            <h4 className="font-medium text-primary">{t('rationaleLabel')}</h4>
+            <h4 className="font-medium text-primary">{getTranslation('rationaleLabel', 'Rationale')}</h4>
             <p className="whitespace-pre-wrap text-sm">{result.rationale}</p>
           </ScrollArea>
         </CardContent>
