@@ -5,7 +5,7 @@ import React, { useState, useEffect, useTransition, useCallback } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Sun, Cloud, Thermometer, Wind, Droplets, Umbrella, Gauge, Loader2, AlertCircle, MapPin } from "lucide-react";
+import { Sun, Cloud, Thermometer, Wind, Droplets, Umbrella, Gauge, Loader2, AlertCircle, MapPin, LocateFixed } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getWeather, type GetWeatherInput, type GetWeatherOutput } from "@/ai/flows/get-weather-flow";
 import { useToast } from "@/hooks/use-toast";
@@ -42,12 +42,13 @@ export default function WeatherWidget({
   const [inputLatitude, setInputLatitude] = useState<string>(initialLatitude.toString());
   const [inputLongitude, setInputLongitude] = useState<string>(initialLongitude.toString());
   const [isPending, startTransition] = useTransition();
+  const [isLocating, setIsLocating] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
   const fetchWeatherForLocation = useCallback((lat: number, lon: number) => {
     setError(null);
-    setWeatherData(null); // Clear previous data while loading new
+    setWeatherData(null); 
     startTransition(async () => {
       try {
         const data: GetWeatherInput = { latitude: lat, longitude: lon };
@@ -55,6 +56,9 @@ export default function WeatherWidget({
         setWeatherData(response);
         setCurrentLatitude(lat);
         setCurrentLongitude(lon);
+        // Update input fields to reflect the location for which weather was fetched
+        setInputLatitude(lat.toString());
+        setInputLongitude(lon.toString());
       } catch (e) {
         const errorMessage = e instanceof Error ? e.message : "Failed to fetch weather data.";
         setError(errorMessage);
@@ -63,7 +67,7 @@ export default function WeatherWidget({
           description: errorMessage,
           variant: "destructive",
         });
-        setWeatherData({ // Basic mock on error
+        setWeatherData({ 
           temperature: 0,
           humidity: 0,
           windSpeed: 0,
@@ -75,26 +79,76 @@ export default function WeatherWidget({
         });
       }
     });
-  }, [toast]);
+  }, [toast, startTransition]); // Removed getWeather from deps as it's stable
+
+  const tryAutoDetectLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      toast({
+        title: "Geolocation Not Supported",
+        description: "Your browser does not support geolocation. Please enter location manually.",
+        variant: "default",
+      });
+      fetchWeatherForLocation(initialLatitude, initialLongitude); // Fallback to default
+      return;
+    }
+
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        toast({
+          title: "Location Detected",
+          description: `Fetching weather for your current location.`,
+          variant: "default",
+        });
+        fetchWeatherForLocation(latitude, longitude);
+        setIsLocating(false);
+      },
+      (geoError) => {
+        let message = "Could not get current location. ";
+        switch(geoError.code) {
+          case geoError.PERMISSION_DENIED:
+            message += "Permission denied.";
+            break;
+          case geoError.POSITION_UNAVAILABLE:
+            message += "Position unavailable.";
+            break;
+          case geoError.TIMEOUT:
+            message += "Request timed out.";
+            break;
+          default:
+            message += "An unknown error occurred.";
+            break;
+        }
+        toast({
+          title: "Geolocation Error",
+          description: `${message} Using default location.`,
+          variant: "destructive",
+        });
+        fetchWeatherForLocation(initialLatitude, initialLongitude); // Fallback to default
+        setIsLocating(false);
+      },
+      { timeout: 10000 } // Optional: Add a timeout for the request
+    );
+  }, [toast, fetchWeatherForLocation, initialLatitude, initialLongitude]);
 
   useEffect(() => {
-    fetchWeatherForLocation(initialLatitude, initialLongitude);
+    tryAutoDetectLocation();
     // Refresh weather every 30 minutes for the current location
     const intervalId = setInterval(() => {
-      // Refetch for currentLatitude and currentLongitude, not initial ones
       fetchWeatherForLocation(currentLatitude, currentLongitude);
     }, 30 * 60 * 1000); 
     return () => clearInterval(intervalId);
-  }, [initialLatitude, initialLongitude, fetchWeatherForLocation, currentLatitude, currentLongitude]); // Added currentLat/Lon to ensure interval uses updated values if they change by other means (though not currently implemented)
+  }, [tryAutoDetectLocation]); // tryAutoDetectLocation will call fetchWeatherForLocation with correct coords. currentLat/Lon removed as they are set by fetch.
 
-  const handleFetchWeather = () => {
+  const handleFetchManualWeather = () => {
     const lat = parseFloat(inputLatitude);
     const lon = parseFloat(inputLongitude);
 
-    if (isNaN(lat) || isNaN(lon)) {
+    if (isNaN(lat) || isNaN(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
       toast({
         title: "Invalid Input",
-        description: "Please enter valid numbers for latitude and longitude.",
+        description: "Please enter valid numbers for latitude (-90 to 90) and longitude (-180 to 180).",
         variant: "destructive",
       });
       return;
@@ -108,10 +162,19 @@ export default function WeatherWidget({
     <Card className={cn("shadow-lg rounded-xl overflow-hidden flex flex-col", className)}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 bg-card hover:bg-muted/50 transition-colors">
         <CardTitle className="text-lg font-semibold text-card-foreground">Weather Updates</CardTitle>
-        {isPending && !weatherData ? <Loader2 className="h-7 w-7 text-accent animate-spin" /> : displayIcon}
+        {(isPending || isLocating) && !weatherData ? <Loader2 className="h-7 w-7 text-accent animate-spin" /> : displayIcon}
       </CardHeader>
       <CardContent className="p-6 flex-grow">
         <div className="mb-4 space-y-2">
+          <Button onClick={tryAutoDetectLocation} disabled={isPending || isLocating} className="w-full bg-primary hover:bg-primary/90">
+            {isLocating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LocateFixed className="mr-2 h-4 w-4" />}
+            Use My Current Location
+          </Button>
+          <div className="flex items-center my-2">
+            <hr className="flex-grow border-t border-border" />
+            <span className="mx-2 text-xs text-muted-foreground">OR</span>
+            <hr className="flex-grow border-t border-border" />
+          </div>
           <div className="flex gap-2">
             <Input
               type="text"
@@ -120,6 +183,7 @@ export default function WeatherWidget({
               onChange={(e) => setInputLatitude(e.target.value)}
               className="flex-1"
               aria-label="Latitude"
+              disabled={isPending || isLocating}
             />
             <Input
               type="text"
@@ -128,18 +192,19 @@ export default function WeatherWidget({
               onChange={(e) => setInputLongitude(e.target.value)}
               className="flex-1"
               aria-label="Longitude"
+              disabled={isPending || isLocating}
             />
           </div>
-          <Button onClick={handleFetchWeather} disabled={isPending} className="w-full bg-primary hover:bg-primary/90">
-            {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MapPin className="mr-2 h-4 w-4" />}
-            Get Weather for Location
+          <Button onClick={handleFetchManualWeather} disabled={isPending || isLocating} className="w-full bg-accent hover:bg-accent/90 text-accent-foreground">
+            {(isPending && !isLocating) ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MapPin className="mr-2 h-4 w-4" />}
+            Get Weather for Entered Location
           </Button>
         </div>
 
-        {isPending && !weatherData ? (
+        {(isPending || isLocating) && !weatherData ? (
           <div className="flex flex-col items-center justify-center h-40">
             <Loader2 className="h-8 w-8 animate-spin text-primary mb-2" />
-            <p className="text-muted-foreground">Loading weather data...</p>
+            <p className="text-muted-foreground">{isLocating ? "Getting your location..." : "Loading weather data..."}</p>
           </div>
         ) : error && !weatherData ? (
           <div className="flex flex-col items-center justify-center h-40 text-destructive">
@@ -178,11 +243,10 @@ export default function WeatherWidget({
         ) : (
            <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
             <Cloud className="h-8 w-8 mb-2" />
-            <p>No weather data available. Enter coordinates and click "Get Weather".</p>
+            <p>No weather data available. Try getting current location or enter coordinates.</p>
           </div>
         )}
       </CardContent>
     </Card>
   );
 }
-
