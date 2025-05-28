@@ -1,7 +1,7 @@
 
 "use client";
 
-import { Leaf, LogOut } from 'lucide-react';
+import { Leaf, LogOut, UserCircle } from 'lucide-react'; // Added UserCircle
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import { Button } from '@/components/ui/button';
 import {
@@ -12,13 +12,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import LanguageSwitcher from '@/components/LanguageSwitcher'; // Import LanguageSwitcher
-import { useTranslation } from 'react-i18next'; // Import useTranslation
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"; // Removed AvatarImage as it's not used
+import LanguageSwitcher from '@/components/LanguageSwitcher';
+import { useTranslation } from 'react-i18next';
+import Link from 'next/link'; // Added Link
 
 export default function Header() {
   const { user, signOut, loading } = useSupabaseAuth();
-  const { t } = useTranslation(); // Initialize useTranslation
+  const { t } = useTranslation();
 
   const getInitials = (name: string | null | undefined) => {
     if (!name) return 'AV';
@@ -34,10 +35,10 @@ export default function Header() {
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between">
         <div className="flex items-center">
           <Leaf className="h-8 w-8 mr-3" />
-          <h1 className="text-2xl font-bold tracking-tight">{t('headerTitle')}</h1> {/* Translate title */}
+          <h1 className="text-2xl font-bold tracking-tight">{t('headerTitle')}</h1>
         </div>
         <div className="flex items-center space-x-2">
-          <LanguageSwitcher /> {/* Add LanguageSwitcher */}
+          <LanguageSwitcher />
           {!loading && user && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -61,9 +62,16 @@ export default function Header() {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                <DropdownMenuItem asChild className="cursor-pointer">
+                  <Link href="/profile">
+                    <UserCircle className="mr-2 h-4 w-4" />
+                    <span>{t('profileLink', 'Profile')}</span>
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={signOut} className="cursor-pointer text-destructive focus:bg-destructive/10 focus:text-destructive">
                   <LogOut className="mr-2 h-4 w-4" />
-                  <span>{t('signOutButton')}</span> {/* Translate sign out */}
+                  <span>{t('signOutButton')}</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
