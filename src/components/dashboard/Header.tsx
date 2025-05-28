@@ -1,8 +1,8 @@
 
 "use client";
 
-import { Leaf, LogOut, UserCircle } from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext';
+import { Leaf, LogOut } from 'lucide-react';
+import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext'; // Use Supabase auth
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -15,7 +15,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 export default function Header() {
-  const { currentUser, signOut, loading } = useAuth();
+  const { user, signOut, loading } = useSupabaseAuth(); // Destructure user from Supabase
 
   const getInitials = (name: string | null | undefined) => {
     if (!name) return 'AV'; // AgriVision
@@ -23,6 +23,9 @@ export default function Header() {
     if (names.length === 1) return names[0].substring(0, 2).toUpperCase();
     return (names[0][0] + names[names.length - 1][0]).toUpperCase();
   };
+  
+  // Supabase stores custom data like displayName in user_metadata
+  const displayName = user?.user_metadata?.display_name || user?.user_metadata?.displayName || user?.email;
 
   return (
     <header className="bg-primary text-primary-foreground shadow-lg">
@@ -32,15 +35,15 @@ export default function Header() {
           <h1 className="text-2xl font-bold tracking-tight">AgriVision Dashboard</h1>
         </div>
         <div>
-          {!loading && currentUser && (
+          {!loading && user && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-10 w-10 rounded-full p-0">
                   <Avatar className="h-9 w-9">
-                    {/* Placeholder for user avatar image if available */}
-                    {/* <AvatarImage src={currentUser.photoURL || undefined} alt={currentUser.displayName || "User"} /> */}
+                    {/* Supabase user objects don't have a photoURL by default unless you add it to metadata */}
+                    {/* <AvatarImage src={user.user_metadata?.avatar_url || undefined} alt={displayName || "User"} /> */}
                     <AvatarFallback className="bg-primary-foreground text-primary font-semibold">
-                      {getInitials(currentUser.displayName)}
+                      {getInitials(displayName)}
                     </AvatarFallback>
                   </Avatar>
                 </Button>
@@ -49,18 +52,14 @@ export default function Header() {
                 <DropdownMenuLabel className="font-normal">
                   <div className="flex flex-col space-y-1">
                     <p className="text-sm font-medium leading-none">
-                      {currentUser.displayName || "User"}
+                      {displayName || "User"}
                     </p>
                     <p className="text-xs leading-none text-muted-foreground">
-                      {currentUser.email}
+                      {user.email}
                     </p>
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                {/* <DropdownMenuItem>
-                  <UserCircle className="mr-2 h-4 w-4" />
-                  <span>Profile</span>
-                </DropdownMenuItem> */}
                 <DropdownMenuItem onClick={signOut} className="cursor-pointer text-destructive focus:bg-destructive/10 focus:text-destructive">
                   <LogOut className="mr-2 h-4 w-4" />
                   <span>Sign Out</span>

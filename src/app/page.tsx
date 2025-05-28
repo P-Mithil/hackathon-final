@@ -9,14 +9,14 @@ import MarketTrendsWidget from '@/components/dashboard/MarketTrendsWidget';
 import { Separator } from '@/components/ui/separator';
 import type { GetWeatherOutput } from '@/ai/flows/get-weather-flow';
 import type { GetMarketTrendsOutput } from '@/ai/flows/getMarketTrendsFlow';
-import { useAuth } from '@/contexts/AuthContext';
+import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext'; // Changed to SupabaseAuth
 import { Loader2 } from 'lucide-react';
 
 const DEFAULT_LATITUDE = 34.0522; // Los Angeles
 const DEFAULT_LONGITUDE = -118.2437;
 
 export default function DashboardPage() {
-  const { currentUser, loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useSupabaseAuth(); // Changed currentUser to user
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lon: number }>({
     lat: DEFAULT_LATITUDE,
     lon: DEFAULT_LONGITUDE,
@@ -51,8 +51,8 @@ export default function DashboardPage() {
     }
   }, []);
 
-  if (authLoading || !currentUser) {
-    // AuthProvider will redirect if not logged in. This is a fallback or while redirecting.
+  if (authLoading || !user) { // Changed currentUser to user
+    // SupabaseAuthProvider will redirect if not logged in. This is a fallback or while redirecting.
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <Loader2 className="h-16 w-16 animate-spin text-primary" />
@@ -79,7 +79,7 @@ export default function DashboardPage() {
               className="md:col-span-1" 
               initialLatitude={currentLocation.lat}
               initialLongitude={currentLocation.lon}
-              onLocationChange={handleLocationChange} // Pass location change handler
+              onLocationChange={handleLocationChange} 
             />
           </div>
         </section>
@@ -100,7 +100,7 @@ export default function DashboardPage() {
             <MarketTrendsWidget 
               initialLatitude={currentLocation.lat}
               initialLongitude={currentLocation.lon}
-              onLocationChange={handleLocationChange} // Pass location change handler
+              onLocationChange={handleLocationChange} 
               onMarketDataFetched={handleMarketDataFetched}
             />
           </div>
