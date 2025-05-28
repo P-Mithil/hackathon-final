@@ -1,7 +1,7 @@
 
 'use server';
 /**
- * @fileOverview Weather data fetching flow and tool.
+ * @fileOverview Weather data fetching flow and tool using tomorrow.io API.
  *
  * - getWeather - A function that fetches weather data for a given location.
  * - GetWeatherInput - The input type for the getWeather function.
@@ -31,38 +31,102 @@ const WeatherDataSchema = z.object({
 });
 export type GetWeatherOutput = z.infer<typeof WeatherDataSchema>;
 
+const weatherCodeToString = (code: number | undefined): string => {
+  if (code === undefined) return "Weather data unavailable";
+  const codes: Record<number, string> = {
+    0: "Unknown",
+    1000: "Clear, Sunny",
+    1100: "Mostly Clear",
+    1101: "Partly Cloudy",
+    1102: "Mostly Cloudy",
+    1001: "Cloudy",
+    2000: "Fog",
+    2100: "Light Fog",
+    4000: "Drizzle",
+    4001: "Rain",
+    4200: "Light Rain",
+    4201: "Heavy Rain",
+    5000: "Snow",
+    5001: "Flurries",
+    5100: "Light Snow",
+    5101: "Heavy Snow",
+    6000: "Freezing Drizzle",
+    6001: "Freezing Rain",
+    6200: "Light Freezing Rain",
+    6201: "Heavy Freezing Rain",
+    7000: "Ice Pellets",
+    7101: "Heavy Ice Pellets",
+    7102: "Light Ice Pellets",
+    8000: "Thunderstorm",
+  };
+  return codes[code] || `Weather Code ${code}`;
+};
+
 // Define the tool to fetch weather data
-// For now, this tool returns mock data.
-// In a real scenario, this would call the tomorrow.io API.
 const fetchWeatherDataTool = ai.defineTool(
   {
     name: 'fetchWeatherData',
-    description: 'Fetches current weather data for a given latitude and longitude from an external API.',
+    description: 'Fetches current weather data for a given latitude and longitude from the tomorrow.io API.',
     inputSchema: GetWeatherInputSchema,
     outputSchema: WeatherDataSchema,
   },
   async (input: GetWeatherInput) => {
     console.log(`Fetching weather for lat: ${input.latitude}, lon: ${input.longitude}`);
-    // const apiKey = process.env.TOMORROW_IO_API_KEY;
-    // if (!apiKey) {
-    //   throw new Error('TOMORROW_IO_API_KEY is not set in environment variables.');
-    // }
-    // TODO: Implement actual API call to tomorrow.io
-    // Example: const response = await fetch(`https://api.tomorrow.io/v4/weather/realtime?location=${input.latitude},${input.longitude}&apikey=${apiKey}`);
-    // const data = await response.json();
-    // return transformDataToSchema(data); // You'll need a function to map API response to WeatherDataSchema
+    const apiKey = process.env.TOMORROW_IO_API_KEY;
 
-    // Mock data for now:
-    return {
-      temperature: 28 + Math.round(Math.random() * 5 - 2.5), // Randomize slightly
-      humidity: 60 + Math.round(Math.random() * 10 - 5),
-      windSpeed: 10 + Math.round(Math.random() * 5 - 2.5),
-      weatherCode: 1000, // Clear
-      precipitationProbability: 10 + Math.round(Math.random() * 10),
-      uvIndex: 7 + Math.round(Math.random() * 2 -1),
-      pressure: 1012 + Math.round(Math.random() * 3 - 1.5),
-      weatherDescription: 'Sunny with occasional clouds',
-    };
+    if (!apiKey) {
+      console.error('TOMORROW_IO_API_KEY is not set in environment variables.');
+      throw new Error('TOMORROW_IO_API_KEY is not set in environment variables.');
+    }
+
+    const fields = [
+      "temperature",
+      "humidity",
+      "windSpeed",
+      "weatherCode",
+      "precipitationProbability",
+      "uvIndex",
+      "pressureSeaLevel"
+    ].join(",");
+
+    const apiUrl = `https://api.tomorrow.io/v4/timelines?location=${input.latitude},${input.longitude}&fields=${fields}&timesteps=current&units=metric&apikey=${apiKey}`;
+
+    try {
+      const response = await fetch(apiUrl);
+      if (!response.ok) {
+        const errorBody = await response.text();
+        console.error(`API Error (${response.status}): ${errorBody}`);
+        throw new Error(`Failed to fetch weather data from tomorrow.io: ${response.status} ${response.statusText}`);
+      }
+      const data = await response.json();
+
+      if (!data.data?.timelines?.[0]?.intervals?.[0]?.values) {
+        console.error('Unexpected API response structure:', data);
+        throw new Error('Invalid data structure received from weather API.');
+      }
+
+      const values = data.data.timelines[0].intervals[0].values;
+
+      // Convert wind speed from m/s to km/h (1 m/s = 3.6 km/h)
+      const windSpeedKmh = values.windSpeed !== undefined ? Math.round(values.windSpeed * 3.6 * 10) / 10 : 0;
+
+      return {
+        temperature: values.temperature !== undefined ? Math.round(values.temperature) : 0,
+        humidity: values.humidity !== undefined ? Math.round(values.humidity) : 0,
+        windSpeed: windSpeedKmh,
+        weatherCode: values.weatherCode || 0,
+        precipitationProbability: values.precipitationProbability !== undefined ? Math.round(values.precipitationProbability) : 0,
+        uvIndex: values.uvIndex || 0,
+        pressure: values.pressureSeaLevel !== undefined ? Math.round(values.pressureSeaLevel) : 1000,
+        weatherDescription: weatherCodeToString(values.weatherCode),
+      };
+    } catch (error) {
+      console.error("Error in fetchWeatherDataTool:", error);
+      if (error instanceof Error) {
+        throw new Error(`Error fetching or processing weather data: ${error.message}`);
+      }
+      throw new Error("An unknown error occurred while fetching weather data.");
+    }
   }
 );
 
@@ -74,8 +138,6 @@ const getWeatherFlow = ai.defineFlow(
     outputSchema: WeatherDataSchema,
   },
   async (input) => {
-    // Here, we directly call the tool.
-    // If we had an LLM making a decision, we'd pass the tool to a prompt.
     return await fetchWeatherDataTool(input);
   }
 );
