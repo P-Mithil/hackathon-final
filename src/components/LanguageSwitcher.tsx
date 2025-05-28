@@ -23,6 +23,8 @@ export default function LanguageSwitcher() {
   const supportedLanguages = [
     { code: 'en', name: t('english') },
     { code: 'es', name: t('spanish') },
+    { code: 'te', name: t('telugu') },
+    { code: 'hi', name: t('hindi') },
   ];
 
   return (

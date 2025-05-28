@@ -1,0 +1,18 @@
+
+{
+  "headerTitle": "అగ్రివిజన్",
+  "signOutButton": "సైన్ అవుట్",
+  "loginPageTitle": "అగ్రివిజన్ కు స్వాగతం",
+  "loginPageDescription": "ప్రారంభించడానికి సైన్ ఇన్ చేయండి లేదా ఖాతా సృష్టించండి.",
+  "footerText": "© {{year}} అగ్రివిజన్. అన్ని హక్కులు ప్రత్యేకించబడ్డాయి.",
+  "signInButton": "సైన్ ఇన్ చేయండి",
+  "signUpButton": "సైన్ అప్ చేయండి",
+  "english": "ఇంగ్లీష్",
+  "spanish": "స్పానిష్",
+  "telugu": "తెలుగు",
+  "hindi": "హిందీ",
+  "language": "భాష",
+  "environmentalOverviewTitle": "పర్యావరణ అవలోకనం",
+  "aiDecisionSupportTitle": "AI నిర్ణయ మద్దతు",
+  "marketInsightsTitle": "మార్కెట్ అంతర్దృష్టులు"
+}

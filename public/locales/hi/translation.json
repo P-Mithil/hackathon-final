@@ -1,0 +1,18 @@
+
+{
+  "headerTitle": "एग्रीविज़न",
+  "signOutButton": "साइन आउट",
+  "loginPageTitle": "एग्रीविज़न में आपका स्वागत है",
+  "loginPageDescription": "आरंभ करने के लिए साइन इन करें या खाता बनाएँ।",
+  "footerText": "© {{year}} एग्रीविज़न. सर्वाधिकार सुरक्षित।",
+  "signInButton": "साइन इन करें",
+  "signUpButton": "साइन अप करें",
+  "english": "अंग्रेजी",
+  "spanish": "स्पेनिश",
+  "telugu": "तेलुगु",
+  "hindi": "हिंदी",
+  "language": "भाषा",
+  "environmentalOverviewTitle": "पर्यावरण अवलोकन",
+  "aiDecisionSupportTitle": "एआई निर्णय समर्थन",
+  "marketInsightsTitle": "बाज़ार अंतर्दृष्टि"
+}

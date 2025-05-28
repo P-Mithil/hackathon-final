@@ -1,20 +1,18 @@
 
 {
-  "headerTitle": "Panel de AgriVision",
-  "loginPageTitle": "Bienvenido a AgriVision",
-  "loginPageDescription": "Inicia sesión o crea una cuenta para acceder a tu panel.",
-  "signInButton": "Iniciar Sesión",
-  "signUpButton": "Registrarse",
+  "headerTitle": "AgriVision",
   "signOutButton": "Cerrar Sesión",
-  "language": "Idioma",
+  "loginPageTitle": "Bienvenido a AgriVision",
+  "loginPageDescription": "Inicia sesión o crea una cuenta para comenzar.",
+  "footerText": "© {{year}} AgriVision. Todos los derechos reservados.",
+  "signInButton": "Iniciar Sesión",
+  "signUpButton": "Regístrate",
   "english": "Inglés",
   "spanish": "Español",
-  "weatherWidgetTitle": "Actualizaciones del Clima",
-  "pestAlertsWidgetTitle": "Alertas de Plagas y Asesoramiento",
-  "marketTrendsWidgetTitle": "Tendencias del Mercado y Recomendación",
-  "aiCropAdvisorTitle": "Asesor de Cultivos IA",
+  "telugu": "Télugu",
+  "hindi": "Hindi",
+  "language": "Idioma",
   "environmentalOverviewTitle": "Resumen Ambiental",
-  "aiDecisionSupportTitle": "Soporte de Decisión IA",
-  "marketInsightsTitle": "Perspectivas del Mercado",
-  "footerText": "Panel de AgriVision © {{year}}"
+  "aiDecisionSupportTitle": "Soporte de Decisiones con IA",
+  "marketInsightsTitle": "Perspectivas del Mercado"
 }

@@ -11,7 +11,7 @@ i18n
   .use(LanguageDetector) // Detects user language
   .use(initReactI18next) // Passes i18n instance to react-i18next
   .init({
-    supportedLngs: ['en', 'es'],
+    supportedLngs: ['en', 'es', 'te', 'hi'], // Added 'te' for Telugu and 'hi' for Hindi
     fallbackLng: 'en',
     debug: process.env.NODE_ENV === 'development', // Enable debug output in development
     detection: {
