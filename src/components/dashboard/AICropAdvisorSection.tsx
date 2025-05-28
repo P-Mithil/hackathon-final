@@ -14,6 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Loader2, Wand2, AlertCircle, CheckCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useTranslation } from 'react-i18next';
 
 const AICropAdvisorInputClientSchema = z.object({
   soilType: z.string().min(3, 'Soil type must be at least 3 characters').describe('The type of soil on the farm.'),
@@ -23,7 +24,6 @@ const AICropAdvisorInputClientSchema = z.object({
   marketData: z.string().min(10, 'Market data summary must be at least 10 characters').describe('Summary of current market data/trends for relevant crops.'),
 });
 
-// Ensure this type matches the schema used in the flow
 type AICropAdvisorFormValues = z.infer<typeof AICropAdvisorInputClientSchema>;
 
 interface AICropAdvisorSectionProps {
@@ -37,8 +37,9 @@ export default function AICropAdvisorSection({
   initialWeatherSummary,
   initialMarketSummary,
 }: AICropAdvisorSectionProps) {
+  const { t } = useTranslation();
   const [isPending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null); // This error state is for AI flow errors, not form validation
   const [result, setResult] = useState<AICropAdvisorOutput | null>(null);
   const { toast } = useToast();
 
@@ -71,7 +72,6 @@ export default function AICropAdvisorSection({
     setResult(null);
     startTransition(async () => {
       try {
-        // Ensure the data passed matches AICropAdvisorInput type from the flow
         const flowInput: AICropAdvisorInput = {
             soilType: data.soilType,
             region: data.region,
@@ -82,15 +82,15 @@ export default function AICropAdvisorSection({
         const response = await aiCropAdvisor(flowInput);
         setResult(response);
         toast({
-          title: "AI Advisor Success",
-          description: "Crop suggestions generated successfully.",
+          title: t('aiAdvisorSuccessToastTitle'),
+          description: t('aiAdvisorSuccessToastDescription'),
           variant: "default",
         });
       } catch (e) {
         const errorMessage = e instanceof Error ? e.message : 'An unknown error occurred.';
         setError(errorMessage);
         toast({
-          title: "AI Advisor Error",
+          title: t('aiAdvisorErrorToastTitle'),
           description: errorMessage,
           variant: "destructive",
         });
@@ -103,9 +103,9 @@ export default function AICropAdvisorSection({
       <CardHeader>
         <div className="flex items-center space-x-2">
           <Wand2 className="h-7 w-7 text-primary" />
-          <CardTitle className="text-xl font-semibold">AI Crop Advisor</CardTitle>
+          <CardTitle className="text-xl font-semibold">{t('aiCropAdvisorCardTitle')}</CardTitle>
         </div>
-        <CardDescription>Get personalized crop suggestions. Fields like Region, Weather, and Market Data may be auto-filled from other dashboard widgets.</CardDescription>
+        <CardDescription>{t('aiCropAdvisorCardDescription')}</CardDescription>
       </CardHeader>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)}>
@@ -116,9 +116,9 @@ export default function AICropAdvisorSection({
                 name="soilType"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Soil Type</FormLabel>
+                    <FormLabel>{t('soilTypeLabel')}</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., Loamy, Sandy, Clay" {...field} />
+                      <Input placeholder={t('soilTypePlaceholder')} {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -129,9 +129,9 @@ export default function AICropAdvisorSection({
                 name="region"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Region / Coordinates</FormLabel>
+                    <FormLabel>{t('regionCoordinatesLabel')}</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., Central Valley or Lat: 34.05, Lon: -118.24" {...field} />
+                      <Input placeholder={t('regionCoordinatesPlaceholder')} {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -143,9 +143,9 @@ export default function AICropAdvisorSection({
               name="cropHistory"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Crop History</FormLabel>
+                  <FormLabel>{t('cropHistoryLabel')}</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="Describe past crops, yields, and any issues (e.g., Corn (2 years ago) - good yield, Soybeans (last year) - pest problems)" {...field} rows={3} />
+                    <Textarea placeholder={t('cropHistoryPlaceholder')} {...field} rows={3} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -156,9 +156,9 @@ export default function AICropAdvisorSection({
               name="weatherData"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Current Weather Summary</FormLabel>
+                  <FormLabel>{t('currentWeatherSummaryLabel')}</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="Summarize recent/expected weather (e.g., Mild spring, average rainfall, upcoming heatwave)" {...field} rows={3} />
+                    <Textarea placeholder={t('currentWeatherSummaryPlaceholder')} {...field} rows={3} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -169,9 +169,9 @@ export default function AICropAdvisorSection({
               name="marketData"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Current Market Data Summary</FormLabel>
+                  <FormLabel>{t('currentMarketDataSummaryLabel')}</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="Summarize relevant market trends (e.g., High demand for organic produce, corn prices stable)" {...field} rows={3} />
+                    <Textarea placeholder={t('currentMarketDataSummaryPlaceholder')} {...field} rows={3} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -185,22 +185,30 @@ export default function AICropAdvisorSection({
               ) : (
                 <Wand2 className="mr-2 h-4 w-4" />
               )}
-              Get Suggestions
+              {t('getSuggestionsButton')}
             </Button>
           </CardFooter>
         </form>
       </Form>
 
+      {error && (
+        <CardContent className="mt-6 border-t pt-6">
+            <AlertCircle className="h-6 w-6 text-destructive mb-2" />
+            <h3 className="text-lg font-semibold text-destructive">{t('aiAdvisorErrorToastTitle')}</h3>
+            <p className="text-sm text-destructive">{error}</p>
+        </CardContent>
+      )}
+
       {result && (
         <CardContent className="mt-6 border-t pt-6">
           <div className="flex items-center space-x-2 mb-4">
             <CheckCircle className="h-6 w-6 text-primary" />
-            <h3 className="text-lg font-semibold">Advisor's Recommendations</h3>
+            <h3 className="text-lg font-semibold">{t('advisorsRecommendationsTitle')}</h3>
           </div>
           <ScrollArea className="h-[200px] p-4 border rounded-md bg-secondary/30">
-            <h4 className="font-medium text-primary">Suggested Crops:</h4>
+            <h4 className="font-medium text-primary">{t('suggestedCropsLabel')}</h4>
             <p className="whitespace-pre-wrap text-sm mb-3">{result.cropSuggestions}</p>
-            <h4 className="font-medium text-primary">Rationale:</h4>
+            <h4 className="font-medium text-primary">{t('rationaleLabel')}</h4>
             <p className="whitespace-pre-wrap text-sm">{result.rationale}</p>
           </ScrollArea>
         </CardContent>

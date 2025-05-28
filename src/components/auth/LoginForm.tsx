@@ -13,7 +13,7 @@ import { supabase } from '@/lib/supabase';
 import { Loader2, LogIn, UserPlus, AlertCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { useTranslation } from 'react-i18next'; // Import useTranslation
+import { useTranslation } from 'react-i18next';
 
 const LoginSchema = z.object({
   email: z.string().email('Invalid email address').min(1, 'Email is required'),
@@ -28,7 +28,7 @@ export default function LoginForm() {
   const [authError, setAuthError] = useState<string | null>(null);
   const { toast } = useToast();
   const router = useRouter();
-  const { t } = useTranslation(); // Initialize useTranslation
+  const { t } = useTranslation();
 
   const { register, handleSubmit, formState: { errors }, watch } = useForm<LoginFormValues>({
     resolver: zodResolver(LoginSchema),
@@ -47,10 +47,10 @@ export default function LoginForm() {
       try {
         if (action === 'signUp') {
           if (!data.displayName || data.displayName.trim().length < 2) {
-             setAuthError("Display name must be at least 2 characters for sign up.");
+             setAuthError(t('displayNameRequiredToast'));
              toast({
-                title: "Sign Up Error",
-                description: "Display name must be at least 2 characters.",
+                title: t('signUpErrorToastTitle'),
+                description: t('displayNameRequiredToast'),
                 variant: "destructive",
               });
              return;
@@ -68,8 +68,8 @@ export default function LoginForm() {
           if (error) throw error;
 
           toast({
-            title: 'Account Created!',
-            description: 'Please check your email to confirm your account if email confirmation is enabled.',
+            title: t('accountCreatedToastTitle'),
+            description: t('accountCreatedToastDescription'),
             variant: 'default',
           });
           router.push('/');
@@ -82,8 +82,8 @@ export default function LoginForm() {
           if (error) throw error;
 
           toast({
-            title: 'Signed In!',
-            description: 'Welcome back.',
+            title: t('signedInToastTitle'),
+            description: t('signedInToastDescription'),
             variant: 'default',
           });
           router.push('/');
@@ -100,7 +100,7 @@ export default function LoginForm() {
 
         setAuthError(friendlyMessage);
         toast({
-          title: action === 'signUp' ? 'Sign Up Error' : 'Sign In Error',
+          title: action === 'signUp' ? t('signUpErrorToastTitle') : t('signInErrorToastTitle'),
           description: friendlyMessage,
           variant: 'destructive',
         });
@@ -118,16 +118,16 @@ export default function LoginForm() {
       {authError && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Authentication Error</AlertTitle>
+          <AlertTitle>{t('authErrorTitle')}</AlertTitle>
           <AlertDescription>{authError}</AlertDescription>
         </Alert>
       )}
       <div className="space-y-2">
-        <Label htmlFor="email">Email Address</Label>
+        <Label htmlFor="email">{t('emailLabel')}</Label>
         <Input
           id="email"
           type="email"
-          placeholder="you@example.com"
+          placeholder={t('emailPlaceholder')}
           {...register('email')}
           className={errors.email ? 'border-destructive focus-visible:ring-destructive' : ''}
           aria-invalid={errors.email ? "true" : "false"}
@@ -136,11 +136,11 @@ export default function LoginForm() {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="password">Password</Label>
+        <Label htmlFor="password">{t('passwordLabel')}</Label>
         <Input
           id="password"
           type="password"
-          placeholder="••••••••"
+          placeholder={t('passwordPlaceholder')}
           {...register('password')}
           className={errors.password ? 'border-destructive focus-visible:ring-destructive' : ''}
           aria-invalid={errors.password ? "true" : "false"}
@@ -150,17 +150,17 @@ export default function LoginForm() {
       
       {(!likelyExistingUser || (currentEmail && !errors.email)) && (
           <div className="space-y-2">
-            <Label htmlFor="displayName">Display Name (for new accounts)</Label>
+            <Label htmlFor="displayName">{t('displayNameLabel')}</Label>
             <Input
               id="displayName"
               type="text"
-              placeholder="Your Name"
+              placeholder={t('displayNamePlaceholder')}
               {...register('displayName')}
               className={errors.displayName ? 'border-destructive focus-visible:ring-destructive' : ''}
               aria-invalid={errors.displayName ? "true" : "false"}
             />
             {errors.displayName && <p className="text-sm text-destructive">{errors.displayName.message}</p>}
-            <p className="text-xs text-muted-foreground">Only needed if you're creating a new account.</p>
+            <p className="text-xs text-muted-foreground">{t('displayNameHelper')}</p>
           </div>
         )}
 
@@ -172,7 +172,7 @@ export default function LoginForm() {
           className="w-full bg-primary hover:bg-primary/90"
         >
           {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LogIn className="mr-2 h-4 w-4" />}
-          {t('signInButton')} {/* Translate button text */}
+          {t('signInButton')}
         </Button>
         <Button
           type="button"
@@ -182,7 +182,7 @@ export default function LoginForm() {
           className="w-full"
         >
           {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />}
-          {t('signUpButton')} {/* Translate button text */}
+          {t('signUpButton')}
         </Button>
       </div>
     </form>

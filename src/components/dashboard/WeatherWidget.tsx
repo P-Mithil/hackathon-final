@@ -9,6 +9,7 @@ import { Sun, Cloud, Thermometer, Wind, Droplets, Umbrella, Gauge, Loader2, Aler
 import { cn } from "@/lib/utils";
 import { getWeather, type GetWeatherInput, type GetWeatherOutput } from "@/ai/flows/get-weather-flow";
 import { useToast } from "@/hooks/use-toast";
+import { useTranslation } from 'react-i18next';
 
 interface WeatherWidgetProps {
   className?: string;
@@ -25,9 +26,9 @@ const getWeatherIcon = (weatherDescription: string | undefined, weatherCode?: nu
   if (desc?.includes("sun") || desc?.includes("clear")) return <Sun className="h-7 w-7 text-yellow-400" />;
   if (desc?.includes("cloud") || desc?.includes("partly cloudy") || desc?.includes("mostly cloudy")) return <Cloud className="h-7 w-7 text-blue-400" />;
   if (desc?.includes("rain") || desc?.includes("drizzle")) return <Umbrella className="h-7 w-7 text-blue-500" />;
-  if (desc?.includes("snow") || desc?.includes("flurries")) return <Cloud className="h-7 w-7 text-white" />;
+  if (desc?.includes("snow") || desc?.includes("flurries")) return <Cloud className="h-7 w-7 text-white" />; // Assuming dark theme for snow
   if (desc?.includes("fog")) return <Cloud className="h-7 w-7 text-gray-400" />;
-  if (desc?.includes("thunderstorm")) return <Cloud className="h-7 w-7 text-purple-500" />;
+  if (desc?.includes("thunderstorm")) return <Cloud className="h-7 w-7 text-purple-500" />; // Assuming a theme where purple stands out
   return <Cloud className="h-7 w-7 text-gray-400" />;
 };
 
@@ -39,6 +40,7 @@ export default function WeatherWidget({
   onLocationChange,
   onWeatherFetched,
 }: WeatherWidgetProps) {
+  const { t } = useTranslation();
   const [weatherData, setWeatherData] = useState<GetWeatherOutput | null>(null);
   const [currentLatitude, setCurrentLatitude] = useState<number>(initialLatitude);
   const [currentLongitude, setCurrentLongitude] = useState<number>(initialLongitude);
@@ -51,7 +53,6 @@ export default function WeatherWidget({
 
   const fetchWeatherForLocation = useCallback((lat: number, lon: number) => {
     setError(null);
-    // setWeatherData(null); // Optionally clear data, or keep old while loading new
     startTransition(async () => {
       try {
         const data: GetWeatherInput = { latitude: lat, longitude: lon };
@@ -67,26 +68,26 @@ export default function WeatherWidget({
         const errorMessage = e instanceof Error ? e.message : "Failed to fetch weather data.";
         setError(errorMessage);
         toast({
-          title: "Weather Error",
+          title: t('errorLoadingWeatherError'),
           description: errorMessage,
           variant: "destructive",
         });
         const fallbackData: GetWeatherOutput = { 
           temperature: 0, humidity: 0, windSpeed: 0, weatherCode: 0,
-          precipitationProbability: 0, uvIndex: 0, pressure: 0, weatherDescription: "Unavailable",
+          precipitationProbability: 0, uvIndex: 0, pressure: 0, weatherDescription: t('weatherUnavailable'),
         };
         setWeatherData(fallbackData);
-        onLocationChange?.(lat, lon); // Still report location used
-        onWeatherFetched?.(fallbackData); // Report unavailable data
+        onLocationChange?.(lat, lon);
+        onWeatherFetched?.(fallbackData);
       }
     });
-  }, [toast, startTransition, onLocationChange, onWeatherFetched]);
+  }, [toast, startTransition, onLocationChange, onWeatherFetched, t]);
 
   const tryAutoDetectLocation = useCallback(() => {
     if (!navigator.geolocation) {
       toast({
-        title: "Geolocation Not Supported",
-        description: "Your browser does not support geolocation. Please enter location manually.",
+        title: t('geolocationNotSupportedToastTitle'),
+        description: t('geolocationNotSupportedToastDescription'),
         variant: "default",
       });
       fetchWeatherForLocation(initialLatitude, initialLongitude);
@@ -98,8 +99,8 @@ export default function WeatherWidget({
       (position) => {
         const { latitude, longitude } = position.coords;
         toast({
-          title: "Location Detected",
-          description: `Fetching weather for your current location.`,
+          title: t('locationDetectedToastTitle'),
+          description: t('fetchingWeatherForCurrentLocationToast'),
           variant: "default",
         });
         fetchWeatherForLocation(latitude, longitude);
@@ -114,8 +115,8 @@ export default function WeatherWidget({
           default: message += "An unknown error occurred."; break;
         }
         toast({
-          title: "Geolocation Error",
-          description: `${message} Using default location.`,
+          title: t('geolocationErrorToastTitle'),
+          description: t('geolocationErrorToastDescription', { message }),
           variant: "destructive",
         });
         fetchWeatherForLocation(initialLatitude, initialLongitude);
@@ -123,27 +124,23 @@ export default function WeatherWidget({
       },
       { timeout: 10000 }
     );
-  }, [toast, fetchWeatherForLocation, initialLatitude, initialLongitude]);
+  }, [toast, fetchWeatherForLocation, initialLatitude, initialLongitude, t]);
 
   useEffect(() => {
     tryAutoDetectLocation();
     const intervalId = setInterval(() => {
-      // Use the currentLatitude and currentLongitude from state for refresh
       fetchWeatherForLocation(currentLatitude, currentLongitude);
     }, 30 * 60 * 1000); 
     return () => clearInterval(intervalId);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run once on mount to get initial location and start interval
+  }, []); 
 
 
-  // Effect to update local state if initial lat/lon props change from parent
   useEffect(() => {
     setCurrentLatitude(initialLatitude);
     setInputLatitude(initialLatitude.toString());
     setCurrentLongitude(initialLongitude);
     setInputLongitude(initialLongitude.toString());
-    // Fetch weather if initial props change and it's not the very first load
-    // This might be too aggressive, consider if this re-fetch is always desired
   }, [initialLatitude, initialLongitude]);
 
 
@@ -153,8 +150,8 @@ export default function WeatherWidget({
 
     if (isNaN(lat) || isNaN(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
       toast({
-        title: "Invalid Input",
-        description: "Please enter valid numbers for latitude (-90 to 90) and longitude (-180 to 180).",
+        title: t('invalidInputToastTitle'),
+        description: t('invalidLatLonToastDescription'),
         variant: "destructive",
       });
       return;
@@ -167,89 +164,89 @@ export default function WeatherWidget({
   return (
     <Card className={cn("shadow-lg rounded-xl overflow-hidden flex flex-col", className)}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 bg-card hover:bg-muted/50 transition-colors">
-        <CardTitle className="text-lg font-semibold text-card-foreground">Weather Updates</CardTitle>
+        <CardTitle className="text-lg font-semibold text-card-foreground">{t('weatherWidgetTitle')}</CardTitle>
         {(isPending || isLocating) && !weatherData ? <Loader2 className="h-7 w-7 text-accent animate-spin" /> : displayIcon}
       </CardHeader>
       <CardContent className="p-6 flex-grow">
         <div className="mb-4 space-y-2">
           <Button onClick={tryAutoDetectLocation} disabled={isPending || isLocating} className="w-full bg-primary hover:bg-primary/90">
             {isLocating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LocateFixed className="mr-2 h-4 w-4" />}
-            Use My Current Location
+            {t('useCurrentLocationButton')}
           </Button>
           <div className="flex items-center my-2">
             <hr className="flex-grow border-t border-border" />
-            <span className="mx-2 text-xs text-muted-foreground">OR</span>
+            <span className="mx-2 text-xs text-muted-foreground">{t('orSeparator')}</span>
             <hr className="flex-grow border-t border-border" />
           </div>
           <div className="flex gap-2">
             <Input
               type="text"
-              placeholder="Latitude"
+              placeholder={t('latitudePlaceholder')}
               value={inputLatitude}
               onChange={(e) => setInputLatitude(e.target.value)}
               className="flex-1"
-              aria-label="Latitude"
+              aria-label={t('latitudePlaceholder')}
               disabled={isPending || isLocating}
             />
             <Input
               type="text"
-              placeholder="Longitude"
+              placeholder={t('longitudePlaceholder')}
               value={inputLongitude}
               onChange={(e) => setInputLongitude(e.target.value)}
               className="flex-1"
-              aria-label="Longitude"
+              aria-label={t('longitudePlaceholder')}
               disabled={isPending || isLocating}
             />
           </div>
           <Button onClick={handleFetchManualWeather} disabled={isPending || isLocating} className="w-full bg-accent hover:bg-accent/90 text-accent-foreground">
             {(isPending && !isLocating) ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MapPin className="mr-2 h-4 w-4" />}
-            Get Weather for Entered Location
+            {t('getWeatherForLocationButton')}
           </Button>
         </div>
 
         {(isPending || isLocating) && !weatherData ? (
           <div className="flex flex-col items-center justify-center h-40">
             <Loader2 className="h-8 w-8 animate-spin text-primary mb-2" />
-            <p className="text-muted-foreground">{isLocating ? "Getting your location..." : "Loading weather data..."}</p>
+            <p className="text-muted-foreground">{isLocating ? t('gettingLocationLoading') : t('loadingWeatherDataLoading')}</p>
           </div>
-        ) : error && !weatherData?.weatherDescription /* Check if weatherData itself is truly empty/error state */ ? (
+        ) : error && !weatherData?.weatherDescription ? (
           <div className="flex flex-col items-center justify-center h-40 text-destructive">
             <AlertCircle className="h-8 w-8 mb-2" />
-            <p className="font-semibold">Error loading weather</p>
+            <p className="font-semibold">{t('errorLoadingWeatherError')}</p>
             <p className="text-xs text-center">{error}</p>
           </div>
         ) : weatherData ? (
           <>
             <div className="text-4xl font-bold text-foreground">{weatherData.temperature}°C</div>
-            <p className="text-sm text-muted-foreground mt-1">{weatherData.weatherDescription}</p>
+            <p className="text-sm text-muted-foreground mt-1">{weatherData.weatherDescription === "Unavailable" ? t('weatherUnavailable') : weatherData.weatherDescription}</p>
             <p className="text-xs text-muted-foreground">Lat: {currentLatitude.toFixed(4)}, Lon: {currentLongitude.toFixed(4)}</p>
             <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-3">
               <div className="flex items-center text-sm">
                 <Droplets className="h-5 w-5 mr-2 text-muted-foreground" />
-                <span>Humidity: {weatherData.humidity}%</span>
+                <span>{t('humidityLabel')} {weatherData.humidity}%</span>
               </div>
               <div className="flex items-center text-sm">
                 <Wind className="h-5 w-5 mr-2 text-muted-foreground" />
-                <span>Wind: {weatherData.windSpeed} km/h</span>
+                <span>{t('windLabel')} {weatherData.windSpeed} km/h</span>
               </div>
               <div className="flex items-center text-sm">
                 <Umbrella className="h-5 w-5 mr-2 text-muted-foreground" />
-                <span>Precip: {weatherData.precipitationProbability}%</span>
+                <span>{t('precipLabel')} {weatherData.precipitationProbability}%</span>
               </div>
               <div className="flex items-center text-sm">
                 <Sun className="h-5 w-5 mr-2 text-muted-foreground" />
-                <span>UV Index: {weatherData.uvIndex}</span>
+                <span>{t('uvIndexLabel')} {weatherData.uvIndex}</span>
               </div>
               <div className="flex items-center text-sm">
                 <Gauge className="h-5 w-5 mr-2 text-muted-foreground" />
-                <span>Pressure: {weatherData.pressure} hPa</span>
+                <span>{t('pressureLabel')} {weatherData.pressure} hPa</span>
               </div>
             </div>
           </>
         ) : (
            <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
             <Cloud className="h-8 w-8 mb-2" />
-            <p>No weather data available. Try getting current location or enter coordinates.</p>
+            <p>{t('noWeatherData')}</p>
           </div>
         )}
       </CardContent>
