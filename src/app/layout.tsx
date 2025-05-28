@@ -2,7 +2,9 @@ import type {Metadata} from 'next';
 import {Geist, Geist_Mono} from 'next/font/google';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
-import { AuthProvider } from '@/contexts/AuthContext';
+// Remove Firebase AuthProvider import
+// import { AuthProvider } from '@/contexts/AuthContext'; 
+import { SupabaseAuthProvider } from '@/contexts/SupabaseAuthContext'; // Add Supabase AuthProvider import
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -27,9 +29,10 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased h-full`}>
-        <AuthProvider>
+        {/* Replace AuthProvider with SupabaseAuthProvider */}
+        <SupabaseAuthProvider>
           {children}
-        </AuthProvider>
+        </SupabaseAuthProvider>
         <Toaster />
       </body>
     </html>
