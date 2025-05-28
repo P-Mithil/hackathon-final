@@ -1,93 +1,298 @@
-"use client"
 
-import * as React from "react"
-import { Line, LineChart, CartesianGrid, XAxis, YAxis, ResponsiveContainer, Tooltip as RechartsTooltip, Legend as RechartsLegend } from "recharts"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
-import { TrendingUp, BarChart3 } from "lucide-react" // BarChart3 for volatility idea
-import { Badge } from "@/components/ui/badge"
-import { cn } from "@/lib/utils"
+"use client";
 
-const chartData = [
-  { month: "Jan", wheat: 200, corn: 150, soybeans: 300 },
-  { month: "Feb", wheat: 210, corn: 160, soybeans: 310 },
-  { month: "Mar", wheat: 220, corn: 155, soybeans: 325 },
-  { month: "Apr", wheat: 215, corn: 170, soybeans: 315 },
-  { month: "May", wheat: 230, corn: 180, soybeans: 340 },
-  { month: "Jun", wheat: 225, corn: 175, soybeans: 330 },
-]
-
-const chartConfig = {
-  wheat: {
-    label: "Wheat",
-    color: "hsl(var(--chart-1))",
-  },
-  corn: {
-    label: "Corn",
-    color: "hsl(var(--chart-2))",
-  },
-  soybeans: {
-    label: "Soybeans",
-    color: "hsl(var(--chart-3))",
-  },
-} satisfies ChartConfig
+import React, { useState, useEffect, useTransition, useCallback } from "react";
+import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { AlertTriangle, TrendingUp, TrendingDown, MinusSquare, DollarSign, BarChart3, Package, Wind, LocateFixed, MapPin, Loader2, Info, PackageSearch } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { getMarketTrends, type GetMarketTrendsInput, type GetMarketTrendsOutput, type MarketCropTrendItem } from "@/ai/flows/getMarketTrendsFlow";
+import { useToast } from "@/hooks/use-toast";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 
 interface MarketTrendsWidgetProps {
   className?: string;
+  initialLatitude?: number;
+  initialLongitude?: number;
 }
 
-export default function MarketTrendsWidget({ className }: MarketTrendsWidgetProps) {
+const getTrendIcon = (trend: MarketCropTrendItem['priceTrend'] | undefined) => {
+  switch (trend) {
+    case 'Rising':
+      return <TrendingUp className="h-4 w-4 mr-1 text-green-500" />;
+    case 'Stable':
+      return <MinusSquare className="h-4 w-4 mr-1 text-yellow-500" />;
+    case 'Falling':
+      return <TrendingDown className="h-4 w-4 mr-1 text-red-500" />;
+    default:
+      return <MinusSquare className="h-4 w-4 mr-1 text-muted-foreground" />;
+  }
+};
+
+const getDemandOutlookBadgeVariant = (outlook: MarketCropTrendItem['demandOutlook'] | undefined) => {
+  switch (outlook) {
+    case 'Strong':
+      return 'default'; // often primary color
+    case 'Moderate':
+      return 'secondary';
+    case 'Weak':
+      return 'outline'; // or destructive if more fitting
+    default:
+      return 'outline';
+  }
+}
+
+const getVolatilityBadgeVariant = (volatility: MarketCropTrendItem['volatility'] | undefined) => {
+   switch (volatility) {
+    case 'High':
+      return 'destructive';
+    case 'Medium':
+      return 'default'; // or a specific accent if available
+    case 'Low':
+      return 'secondary';
+    default:
+      return 'outline';
+  }
+}
+
+
+export default function MarketTrendsWidget({ 
+  className,
+  initialLatitude = 34.0522, // Default to LA
+  initialLongitude = -118.2437 
+}: MarketTrendsWidgetProps) {
+  const [marketData, setMarketData] = useState<GetMarketTrendsOutput | null>(null);
+  const [currentLatitude, setCurrentLatitude] = useState<number>(initialLatitude);
+  const [currentLongitude, setCurrentLongitude] = useState<number>(initialLongitude);
+  const [inputLatitude, setInputLatitude] = useState<string>(initialLatitude.toString());
+  const [inputLongitude, setInputLongitude] = useState<string>(initialLongitude.toString());
+  const [isPending, startTransition] = useTransition();
+  const [isLocating, setIsLocating] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  const fetchMarketDataForLocation = useCallback((lat: number, lon: number) => {
+    setError(null);
+    startTransition(async () => {
+      try {
+        const data: GetMarketTrendsInput = { latitude: lat, longitude: lon };
+        const response = await getMarketTrends(data);
+        setMarketData(response);
+        setCurrentLatitude(lat);
+        setCurrentLongitude(lon);
+        setInputLatitude(lat.toString());
+        setInputLongitude(lon.toString());
+        toast({
+          title: "Market Trends Updated",
+          description: `Fetched insights for Lat: ${lat.toFixed(2)}, Lon: ${lon.toFixed(2)}`,
+          variant: "default"
+        });
+      } catch (e) {
+        const errorMessage = e instanceof Error ? e.message : "Failed to fetch market trends.";
+        setError(errorMessage);
+        toast({
+          title: "Market Trends Error",
+          description: errorMessage,
+          variant: "destructive",
+        });
+        setMarketData(null);
+      }
+    });
+  }, [toast, startTransition]);
+
+  const tryAutoDetectLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      toast({
+        title: "Geolocation Not Supported",
+        description: "Browser doesn't support geolocation. Enter location manually.",
+        variant: "default",
+      });
+      fetchMarketDataForLocation(initialLatitude, initialLongitude);
+      return;
+    }
+
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        toast({
+          title: "Location Detected",
+          description: `Fetching market trends for your current location.`,
+          variant: "default",
+        });
+        fetchMarketDataForLocation(latitude, longitude);
+        setIsLocating(false);
+      },
+      (geoError) => {
+        toast({
+          title: "Geolocation Error",
+          description: `Could not get current location: ${geoError.message}. Using default.`,
+          variant: "destructive",
+        });
+        fetchMarketDataForLocation(initialLatitude, initialLongitude);
+        setIsLocating(false);
+      },
+      { timeout: 10000 }
+    );
+  }, [toast, fetchMarketDataForLocation, initialLatitude, initialLongitude]);
+
+  useEffect(() => {
+    tryAutoDetectLocation();
+  }, [tryAutoDetectLocation]);
+
+  const handleFetchManualTrends = () => {
+    const lat = parseFloat(inputLatitude);
+    const lon = parseFloat(inputLongitude);
+
+    if (isNaN(lat) || isNaN(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+      toast({
+        title: "Invalid Input",
+        description: "Please enter valid numbers for latitude (-90 to 90) and longitude (-180 to 180).",
+        variant: "destructive",
+      });
+      return;
+    }
+    fetchMarketDataForLocation(lat, lon);
+  };
+
   return (
-    <Card className={cn("shadow-lg rounded-xl overflow-hidden", className)}>
+    <Card className={cn("shadow-lg rounded-xl overflow-hidden flex flex-col", className)}>
       <CardHeader>
         <div className="flex items-center space-x-2">
-          <TrendingUp className="h-7 w-7 text-primary" />
+          <BarChart3 className="h-7 w-7 text-primary" />
           <CardTitle className="text-xl font-semibold">Market Trends</CardTitle>
         </div>
-        <CardDescription>Nearby market price trends and volatility for key crops.</CardDescription>
+        <CardDescription>AI-generated market insights for key crops in the selected region.</CardDescription>
       </CardHeader>
-      <CardContent>
-        <ChartContainer config={chartConfig} className="aspect-video h-[250px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="month" tickLine={false} axisLine={false} stroke="hsl(var(--muted-foreground))" fontSize={12} />
-              <YAxis tickLine={false} axisLine={false} stroke="hsl(var(--muted-foreground))" fontSize={12} tickFormatter={(value) => `$${value}`} />
-              <RechartsTooltip
-                content={<ChartTooltipContent indicator="line" labelClassName="text-sm" className="bg-card shadow-lg rounded-lg" />}
-                cursor={{ stroke: "hsl(var(--accent))", strokeWidth: 2, strokeDasharray: "3 3" }}
-              />
-              <RechartsLegend content={({ payload }) => (
-                  <div className="flex justify-center space-x-4 mt-2">
-                    {payload?.map((entry, index) => (
-                      <div key={`item-${index}`} className="flex items-center space-x-1 text-xs">
-                        <span style={{ backgroundColor: entry.color }} className="h-2 w-2 rounded-full inline-block" />
-                        <span>{entry.value}</span>
-                      </div>
-                    ))}
-                  </div>
-                )} />
-              <Line type="monotone" dataKey="wheat" stroke="var(--color-wheat)" strokeWidth={2} dot={{ r: 4, fill: "var(--color-wheat)" }} activeDot={{ r: 6 }} />
-              <Line type="monotone" dataKey="corn" stroke="var(--color-corn)" strokeWidth={2} dot={{ r: 4, fill: "var(--color-corn)" }} activeDot={{ r: 6 }} />
-              <Line type="monotone" dataKey="soybeans" stroke="var(--color-soybeans)" strokeWidth={2} dot={{ r: 4, fill: "var(--color-soybeans)" }} activeDot={{ r: 6 }} />
-            </LineChart>
-          </ResponsiveContainer>
-        </ChartContainer>
-        <div className="mt-6 space-y-3">
-          <h4 className="text-md font-semibold flex items-center">
-            <BarChart3 className="h-5 w-5 mr-2 text-accent" />
-            Market Volatility
-          </h4>
-          <div className="flex flex-wrap gap-2">
-            <Badge variant="outline" className="border-chart-1 text-chart-1">Wheat: Low</Badge>
-            <Badge variant="outline" className="border-chart-2 text-chart-2">Corn: Medium</Badge>
-            <Badge variant="outline" className="border-chart-3 text-chart-3">Soybeans: High</Badge>
+      <CardContent className="p-6 flex-grow space-y-6">
+        <div className="space-y-2">
+           <Button onClick={tryAutoDetectLocation} disabled={isPending || isLocating} className="w-full bg-primary hover:bg-primary/90">
+            {isLocating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LocateFixed className="mr-2 h-4 w-4" />}
+            Use My Current Location
+          </Button>
+          <div className="flex items-center my-2">
+            <hr className="flex-grow border-t border-border" />
+            <span className="mx-2 text-xs text-muted-foreground">OR</span>
+            <hr className="flex-grow border-t border-border" />
           </div>
-          <p className="text-xs text-muted-foreground">
-            Volatility indicators are based on recent price fluctuations. High volatility may represent higher risk and reward.
-          </p>
+          <div className="flex gap-2">
+            <Input
+              type="text"
+              placeholder="Latitude"
+              value={inputLatitude}
+              onChange={(e) => setInputLatitude(e.target.value)}
+              className="flex-1"
+              aria-label="Latitude"
+              disabled={isPending || isLocating}
+            />
+            <Input
+              type="text"
+              placeholder="Longitude"
+              value={inputLongitude}
+              onChange={(e) => setInputLongitude(e.target.value)}
+              className="flex-1"
+              aria-label="Longitude"
+              disabled={isPending || isLocating}
+            />
+          </div>
+          <Button onClick={handleFetchManualTrends} disabled={isPending || isLocating} className="w-full bg-accent hover:bg-accent/90 text-accent-foreground">
+            {(isPending && !isLocating) ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <MapPin className="mr-2 h-4 w-4" />}
+            Get Market Trends for Entered Location
+          </Button>
         </div>
+        
+        <p className="text-xs text-muted-foreground">Location: Lat: {currentLatitude.toFixed(2)}, Lon: {currentLongitude.toFixed(2)}</p>
+
+        {isPending && !marketData ? (
+          <div className="flex flex-col items-center justify-center h-40">
+            <Loader2 className="h-8 w-8 animate-spin text-primary mb-2" />
+            <p className="text-muted-foreground">{isLocating ? "Getting your location..." : "Loading market insights..."}</p>
+          </div>
+        ) : error && !marketData ? (
+          <div className="flex flex-col items-center justify-center h-40 text-destructive">
+            <AlertTriangle className="h-8 w-8 mb-2" />
+            <p className="font-semibold">Error loading market trends</p>
+            <p className="text-xs text-center">{error}</p>
+          </div>
+        ) : marketData && marketData.regionalCrops.length > 0 ? (
+          <div className="space-y-4">
+            {marketData.regionalCrops.map((crop, index) => (
+              <Card key={index} className="p-4 bg-card border rounded-lg shadow-sm">
+                <CardHeader className="p-0 pb-2">
+                   <CardTitle className="text-lg flex items-center">
+                     <Package className="h-5 w-5 mr-2 text-primary"/>
+                     {crop.cropName}
+                   </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0 space-y-2 text-sm">
+                  <div className="flex items-center">
+                    <DollarSign className="h-4 w-4 mr-2 text-muted-foreground" /> 
+                    Price: <span className="font-semibold ml-1">{crop.estimatedPrice}</span>
+                  </div>
+                  <div className="flex items-center">
+                    {getTrendIcon(crop.priceTrend)}
+                    Trend: <Badge variant={crop.priceTrend === 'Rising' ? 'default' : crop.priceTrend === 'Falling' ? 'destructive' : 'secondary'} className="ml-1">{crop.priceTrend}</Badge>
+                  </div>
+                  <div className="flex items-center">
+                     <PackageSearch className="h-4 w-4 mr-2 text-muted-foreground" /> {/* Using PackageSearch for Demand */}
+                     Demand: <Badge variant={getDemandOutlookBadgeVariant(crop.demandOutlook)} className="ml-1">{crop.demandOutlook}</Badge>
+                  </div>
+                  <div className="flex items-center">
+                     <Wind className="h-4 w-4 mr-2 text-muted-foreground" /> {/* Using Wind for Volatility */}
+                     Volatility: <Badge variant={getVolatilityBadgeVariant(crop.volatility)} className="ml-1">{crop.volatility}</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground pt-1"><span className="font-medium text-foreground">Rationale:</span> {crop.rationale}</p>
+                </CardContent>
+              </Card>
+            ))}
+            {marketData.marketSummary && (
+                 <Card className="mt-4 p-4 bg-secondary/30 rounded-lg border">
+                    <CardHeader className="p-0 pb-2">
+                        <CardTitle className="text-md font-semibold text-secondary-foreground flex items-center">
+                            <Info className="h-5 w-5 mr-2 text-primary"/>
+                            Regional Market Summary
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                        <p className="text-sm text-muted-foreground">{marketData.marketSummary}</p>
+                    </CardContent>
+                 </Card>
+            )}
+          </div>
+        ) : marketData && marketData.regionalCrops.length === 0 ? (
+            <div className="text-center py-6">
+                <Info className="h-12 w-12 text-primary mx-auto mb-3" />
+                <p className="font-medium text-lg">No Specific Crop Trends Available</p>
+                <p className="text-sm text-muted-foreground mb-3">
+                    The AI could not identify specific crop trends for this location.
+                </p>
+                {marketData.marketSummary && (
+                     <Card className="mt-4 p-3 bg-secondary/50 rounded-lg border text-left">
+                        <CardHeader className="p-0 pb-2">
+                            <CardTitle className="text-md font-semibold text-secondary-foreground flex items-center">
+                                <Info className="h-5 w-5 mr-2 text-primary"/>
+                                Regional Market Summary
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                           <p className="text-sm text-muted-foreground">{marketData.marketSummary}</p>
+                        </CardContent>
+                     </Card>
+                )}
+            </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
+            <BarChart3 className="h-8 w-8 mb-2" />
+            <p>No market trend data available. Try fetching for your location.</p>
+          </div>
+        )}
       </CardContent>
+       <CardFooter className="p-4 border-t">
+         <p className="text-xs text-muted-foreground">Market insights are AI-generated and for informational purposes only. Not financial advice.</p>
+       </CardFooter>
     </Card>
-  )
+  );
 }
+
