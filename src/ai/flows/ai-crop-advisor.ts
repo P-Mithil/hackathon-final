@@ -1,4 +1,5 @@
-// 'use server';
+
+'use server';
 /**
  * @fileOverview AI-powered crop suggestion tool for farmers.
  *
@@ -7,17 +8,15 @@
  * - AICropAdvisorOutput - The return type for the aiCropAdvisor function.
  */
 
-'use server';
-
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
 const AICropAdvisorInputSchema = z.object({
   soilType: z.string().describe('The type of soil on the farm.'),
-  region: z.string().describe('The geographical region of the farm.'),
+  region: z.string().describe('The geographical region (e.g., "Central Valley") or coordinates (e.g., "Lat: 34.05, Lon: -118.24") of the farm.'),
   cropHistory: z.string().describe('The history of crops grown on the farm.'),
-  weatherData: z.string().describe('Real-time weather data for the farm.'),
-  marketData: z.string().describe('Real-time market data for crops.'),
+  weatherData: z.string().describe('Summary of current weather conditions for the farm.'),
+  marketData: z.string().describe('Summary of current market data/trends for relevant crops.'),
 });
 export type AICropAdvisorInput = z.infer<typeof AICropAdvisorInputSchema>;
 
@@ -39,15 +38,15 @@ const prompt = ai.definePrompt({
   output: {schema: AICropAdvisorOutputSchema},
   prompt: `You are an AI crop advisor providing personalized crop suggestions to farmers.
 
-You will analyze the farm's data, including soil type, region, crop history, weather data, and market data, to provide the best crop suggestions.
+You will analyze the farm's data, including soil type, region/coordinates, crop history, a summary of current weather conditions, and a summary of current market data, to provide the best crop suggestions.
 
 Soil Type: {{{soilType}}}
-Region: {{{region}}}
+Region/Coordinates: {{{region}}}
 Crop History: {{{cropHistory}}}
-Weather Data: {{{weatherData}}}
-Market Data: {{{marketData}}}
+Weather Data Summary: {{{weatherData}}}
+Market Data Summary: {{{marketData}}}
 
-Based on this information, what crops would you recommend to the farmer, and why?
+Based on this information, what crops would you recommend to the farmer, and why? Be specific in your suggestions and provide a clear rationale.
 `,
 });
 

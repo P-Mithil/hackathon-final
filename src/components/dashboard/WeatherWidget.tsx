@@ -14,9 +14,10 @@ interface WeatherWidgetProps {
   className?: string;
   initialLatitude?: number;
   initialLongitude?: number;
+  onLocationChange?: (lat: number, lon: number) => void;
+  onWeatherFetched?: (weather: GetWeatherOutput | null) => void;
 }
 
-// Helper to get a weather icon based on a simplified code or description
 const getWeatherIcon = (weatherDescription: string | undefined, weatherCode?: number) => {
   if (!weatherDescription && !weatherCode) return <Cloud className="h-7 w-7 text-accent" />;
   const desc = weatherDescription?.toLowerCase();
@@ -24,17 +25,19 @@ const getWeatherIcon = (weatherDescription: string | undefined, weatherCode?: nu
   if (desc?.includes("sun") || desc?.includes("clear")) return <Sun className="h-7 w-7 text-yellow-400" />;
   if (desc?.includes("cloud") || desc?.includes("partly cloudy") || desc?.includes("mostly cloudy")) return <Cloud className="h-7 w-7 text-blue-400" />;
   if (desc?.includes("rain") || desc?.includes("drizzle")) return <Umbrella className="h-7 w-7 text-blue-500" />;
-  if (desc?.includes("snow") || desc?.includes("flurries")) return <Cloud className="h-7 w-7 text-white" />; // Placeholder for snow
-  if (desc?.includes("fog")) return <Cloud className="h-7 w-7 text-gray-400" />; // Placeholder for fog
-  if (desc?.includes("thunderstorm")) return <Cloud className="h-7 w-7 text-purple-500" />; // Placeholder for thunderstorm
+  if (desc?.includes("snow") || desc?.includes("flurries")) return <Cloud className="h-7 w-7 text-white" />;
+  if (desc?.includes("fog")) return <Cloud className="h-7 w-7 text-gray-400" />;
+  if (desc?.includes("thunderstorm")) return <Cloud className="h-7 w-7 text-purple-500" />;
   return <Cloud className="h-7 w-7 text-gray-400" />;
 };
 
 
 export default function WeatherWidget({ 
   className, 
-  initialLatitude = 34.0522, // Default to LA
-  initialLongitude = -118.2437 
+  initialLatitude = 34.0522, 
+  initialLongitude = -118.2437,
+  onLocationChange,
+  onWeatherFetched,
 }: WeatherWidgetProps) {
   const [weatherData, setWeatherData] = useState<GetWeatherOutput | null>(null);
   const [currentLatitude, setCurrentLatitude] = useState<number>(initialLatitude);
@@ -48,7 +51,7 @@ export default function WeatherWidget({
 
   const fetchWeatherForLocation = useCallback((lat: number, lon: number) => {
     setError(null);
-    setWeatherData(null); 
+    // setWeatherData(null); // Optionally clear data, or keep old while loading new
     startTransition(async () => {
       try {
         const data: GetWeatherInput = { latitude: lat, longitude: lon };
@@ -56,9 +59,10 @@ export default function WeatherWidget({
         setWeatherData(response);
         setCurrentLatitude(lat);
         setCurrentLongitude(lon);
-        // Update input fields to reflect the location for which weather was fetched
         setInputLatitude(lat.toString());
         setInputLongitude(lon.toString());
+        onLocationChange?.(lat, lon);
+        onWeatherFetched?.(response);
       } catch (e) {
         const errorMessage = e instanceof Error ? e.message : "Failed to fetch weather data.";
         setError(errorMessage);
@@ -67,19 +71,16 @@ export default function WeatherWidget({
           description: errorMessage,
           variant: "destructive",
         });
-        setWeatherData({ 
-          temperature: 0,
-          humidity: 0,
-          windSpeed: 0,
-          weatherCode: 0,
-          precipitationProbability: 0,
-          uvIndex: 0,
-          pressure: 0,
-          weatherDescription: "Unavailable",
-        });
+        const fallbackData: GetWeatherOutput = { 
+          temperature: 0, humidity: 0, windSpeed: 0, weatherCode: 0,
+          precipitationProbability: 0, uvIndex: 0, pressure: 0, weatherDescription: "Unavailable",
+        };
+        setWeatherData(fallbackData);
+        onLocationChange?.(lat, lon); // Still report location used
+        onWeatherFetched?.(fallbackData); // Report unavailable data
       }
     });
-  }, [toast, startTransition]); // Removed getWeather from deps as it's stable
+  }, [toast, startTransition, onLocationChange, onWeatherFetched]);
 
   const tryAutoDetectLocation = useCallback(() => {
     if (!navigator.geolocation) {
@@ -88,7 +89,7 @@ export default function WeatherWidget({
         description: "Your browser does not support geolocation. Please enter location manually.",
         variant: "default",
       });
-      fetchWeatherForLocation(initialLatitude, initialLongitude); // Fallback to default
+      fetchWeatherForLocation(initialLatitude, initialLongitude);
       return;
     }
 
@@ -107,39 +108,44 @@ export default function WeatherWidget({
       (geoError) => {
         let message = "Could not get current location. ";
         switch(geoError.code) {
-          case geoError.PERMISSION_DENIED:
-            message += "Permission denied.";
-            break;
-          case geoError.POSITION_UNAVAILABLE:
-            message += "Position unavailable.";
-            break;
-          case geoError.TIMEOUT:
-            message += "Request timed out.";
-            break;
-          default:
-            message += "An unknown error occurred.";
-            break;
+          case geoError.PERMISSION_DENIED: message += "Permission denied."; break;
+          case geoError.POSITION_UNAVAILABLE: message += "Position unavailable."; break;
+          case geoError.TIMEOUT: message += "Request timed out."; break;
+          default: message += "An unknown error occurred."; break;
         }
         toast({
           title: "Geolocation Error",
           description: `${message} Using default location.`,
           variant: "destructive",
         });
-        fetchWeatherForLocation(initialLatitude, initialLongitude); // Fallback to default
+        fetchWeatherForLocation(initialLatitude, initialLongitude);
         setIsLocating(false);
       },
-      { timeout: 10000 } // Optional: Add a timeout for the request
+      { timeout: 10000 }
     );
   }, [toast, fetchWeatherForLocation, initialLatitude, initialLongitude]);
 
   useEffect(() => {
     tryAutoDetectLocation();
-    // Refresh weather every 30 minutes for the current location
     const intervalId = setInterval(() => {
+      // Use the currentLatitude and currentLongitude from state for refresh
       fetchWeatherForLocation(currentLatitude, currentLongitude);
     }, 30 * 60 * 1000); 
     return () => clearInterval(intervalId);
-  }, [tryAutoDetectLocation]); // tryAutoDetectLocation will call fetchWeatherForLocation with correct coords. currentLat/Lon removed as they are set by fetch.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run once on mount to get initial location and start interval
+
+
+  // Effect to update local state if initial lat/lon props change from parent
+  useEffect(() => {
+    setCurrentLatitude(initialLatitude);
+    setInputLatitude(initialLatitude.toString());
+    setCurrentLongitude(initialLongitude);
+    setInputLongitude(initialLongitude.toString());
+    // Fetch weather if initial props change and it's not the very first load
+    // This might be too aggressive, consider if this re-fetch is always desired
+  }, [initialLatitude, initialLongitude]);
+
 
   const handleFetchManualWeather = () => {
     const lat = parseFloat(inputLatitude);
@@ -206,7 +212,7 @@ export default function WeatherWidget({
             <Loader2 className="h-8 w-8 animate-spin text-primary mb-2" />
             <p className="text-muted-foreground">{isLocating ? "Getting your location..." : "Loading weather data..."}</p>
           </div>
-        ) : error && !weatherData ? (
+        ) : error && !weatherData?.weatherDescription /* Check if weatherData itself is truly empty/error state */ ? (
           <div className="flex flex-col items-center justify-center h-40 text-destructive">
             <AlertCircle className="h-8 w-8 mb-2" />
             <p className="font-semibold">Error loading weather</p>

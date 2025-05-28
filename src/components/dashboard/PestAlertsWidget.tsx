@@ -15,6 +15,7 @@ interface PestAlertsWidgetProps {
   className?: string;
   initialLatitude?: number;
   initialLongitude?: number;
+  onLocationChange?: (lat: number, lon: number) => void;
 }
 
 const getRiskIcon = (riskLevel: PestAlertItem['riskLevel'] | undefined) => {
@@ -22,7 +23,7 @@ const getRiskIcon = (riskLevel: PestAlertItem['riskLevel'] | undefined) => {
     case 'High':
       return <AlertTriangle className="h-5 w-5 mr-3 mt-0.5 text-destructive flex-shrink-0" />;
     case 'Medium':
-      return <ShieldAlert className="h-5 w-5 mr-3 mt-0.5 text-accent-foreground flex-shrink-0" />; // Using accent for medium
+      return <ShieldAlert className="h-5 w-5 mr-3 mt-0.5 text-accent-foreground flex-shrink-0" />;
     case 'Low':
       return <ShieldCheck className="h-5 w-5 mr-3 mt-0.5 text-primary flex-shrink-0" />;
     case 'Info':
@@ -34,24 +35,20 @@ const getRiskIcon = (riskLevel: PestAlertItem['riskLevel'] | undefined) => {
 
 const getRiskBadgeVariant = (riskLevel: PestAlertItem['riskLevel'] | undefined) => {
   switch (riskLevel) {
-    case 'High':
-      return "destructive";
-    case 'Medium':
-      return "default"; // Will use primary color - can adjust if Accent variant exists for Badge
-    case 'Low':
-      return "secondary";
-    case 'Info':
-      return "outline";
-    default:
-      return "outline";
+    case 'High': return "destructive";
+    case 'Medium': return "default"; 
+    case 'Low': return "secondary";
+    case 'Info': return "outline";
+    default: return "outline";
   }
 };
 
 
 export default function PestAlertsWidget({ 
   className,
-  initialLatitude = 34.0522, // Default to LA
-  initialLongitude = -118.2437 
+  initialLatitude = 34.0522, 
+  initialLongitude = -118.2437,
+  onLocationChange,
 }: PestAlertsWidgetProps) {
   const [pestData, setPestData] = useState<GetPestAlertsOutput | null>(null);
   const [currentLatitude, setCurrentLatitude] = useState<number>(initialLatitude);
@@ -65,7 +62,6 @@ export default function PestAlertsWidget({
 
   const fetchPestAlertsForLocation = useCallback((lat: number, lon: number) => {
     setError(null);
-    // setPestData(null); // Keep old data while loading new for smoother UX? Or clear? Clearing for now.
     startTransition(async () => {
       try {
         const data: GetPestAlertsInput = { latitude: lat, longitude: lon };
@@ -75,6 +71,7 @@ export default function PestAlertsWidget({
         setCurrentLongitude(lon);
         setInputLatitude(lat.toString());
         setInputLongitude(lon.toString());
+        onLocationChange?.(lat, lon);
         toast({
           title: "Pest Alerts Updated",
           description: `Fetched alerts for Lat: ${lat.toFixed(2)}, Lon: ${lon.toFixed(2)}`,
@@ -88,10 +85,11 @@ export default function PestAlertsWidget({
           description: errorMessage,
           variant: "destructive",
         });
-        setPestData(null); // Clear data on error
+        setPestData(null); 
+        onLocationChange?.(lat, lon); // Still report location used
       }
     });
-  }, [toast, startTransition]);
+  }, [toast, startTransition, onLocationChange]);
 
   const tryAutoDetectLocation = useCallback(() => {
     if (!navigator.geolocation) {
@@ -131,12 +129,17 @@ export default function PestAlertsWidget({
 
   useEffect(() => {
     tryAutoDetectLocation();
-    // Optionally, add a refresh interval if desired, though pest alerts might not change as frequently as weather.
-    // const intervalId = setInterval(() => {
-    //   fetchPestAlertsForLocation(currentLatitude, currentLongitude);
-    // }, 60 * 60 * 1000); // e.g., every hour
-    // return () => clearInterval(intervalId);
-  }, [tryAutoDetectLocation]);
+     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run once on mount
+
+
+  // Effect to update local state if initial lat/lon props change from parent
+  useEffect(() => {
+    setCurrentLatitude(initialLatitude);
+    setInputLatitude(initialLatitude.toString());
+    setCurrentLongitude(initialLongitude);
+    setInputLongitude(initialLongitude.toString());
+  }, [initialLatitude, initialLongitude]);
 
 
   const handleFetchManualAlerts = () => {

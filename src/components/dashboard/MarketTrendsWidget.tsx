@@ -22,6 +22,8 @@ interface MarketTrendsWidgetProps {
   className?: string;
   initialLatitude?: number;
   initialLongitude?: number;
+  onLocationChange?: (lat: number, lon: number) => void;
+  onMarketDataFetched?: (marketData: GetMarketTrendsOutput | null) => void;
 }
 
 const getTrendIcon = (trend: MarketCropTrendItem['priceTrend'] | undefined) => {
@@ -91,7 +93,7 @@ const generateChartData = (trend: MarketCropTrendItem['priceTrend'] | undefined)
     case 'Stable':
       return basePoints.map((p) => ({ ...p, value: 10 }));
     default:
-      return basePoints.map((p) => ({ ...p, value: 0 })); // Or some other placeholder
+      return basePoints.map((p) => ({ ...p, value: 0 }));
   }
 };
 
@@ -105,8 +107,10 @@ const chartConfig = {
 
 export default function MarketTrendsWidget({ 
   className,
-  initialLatitude = 34.0522, // Default to LA
-  initialLongitude = -118.2437 
+  initialLatitude = 34.0522, 
+  initialLongitude = -118.2437,
+  onLocationChange,
+  onMarketDataFetched,
 }: MarketTrendsWidgetProps) {
   const [marketData, setMarketData] = useState<GetMarketTrendsOutput | null>(null);
   const [currentLatitude, setCurrentLatitude] = useState<number>(initialLatitude);
@@ -129,6 +133,8 @@ export default function MarketTrendsWidget({
         setCurrentLongitude(lon);
         setInputLatitude(lat.toString());
         setInputLongitude(lon.toString());
+        onLocationChange?.(lat, lon);
+        onMarketDataFetched?.(response);
         toast({
           title: "Market Trends Updated",
           description: `Fetched insights for Lat: ${lat.toFixed(2)}, Lon: ${lon.toFixed(2)}`,
@@ -143,9 +149,11 @@ export default function MarketTrendsWidget({
           variant: "destructive",
         });
         setMarketData(null);
+        onLocationChange?.(lat, lon); // Still report location used
+        onMarketDataFetched?.(null);
       }
     });
-  }, [toast]);
+  }, [toast, startTransition, onLocationChange, onMarketDataFetched]);
 
   const tryAutoDetectLocation = useCallback(() => {
     if (!navigator.geolocation) {
@@ -185,7 +193,16 @@ export default function MarketTrendsWidget({
 
   useEffect(() => {
     tryAutoDetectLocation();
-  }, [tryAutoDetectLocation]);
+     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run once on mount
+
+  // Effect to update local state if initial lat/lon props change from parent
+  useEffect(() => {
+    setCurrentLatitude(initialLatitude);
+    setInputLatitude(initialLatitude.toString());
+    setCurrentLongitude(initialLongitude);
+    setInputLongitude(initialLongitude.toString());
+  }, [initialLatitude, initialLongitude]);
 
   const handleFetchManualTrends = () => {
     const lat = parseFloat(inputLatitude);
@@ -300,7 +317,7 @@ export default function MarketTrendsWidget({
                           Price: <span className="font-semibold ml-1">{crop.estimatedPrice}</span>
                         </div>
                         
-                        {trendChartData.some(d => d.value !== 0) && ( // Only show chart if there's a trend
+                        {trendChartData.some(d => d.value !== 0) && ( 
                           <div className="my-2 h-[50px]">
                             <ChartContainer config={chartConfig} className="w-full h-full aspect-auto">
                               <LineChart
@@ -387,5 +404,3 @@ export default function MarketTrendsWidget({
     </Card>
   );
 }
-
-    

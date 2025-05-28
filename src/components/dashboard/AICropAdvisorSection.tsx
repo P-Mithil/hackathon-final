@@ -1,6 +1,7 @@
+
 "use client";
 
-import React, { useState, useTransition } from 'react';
+import React, { useState, useTransition, useEffect } from 'react';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -14,37 +15,71 @@ import { Loader2, Wand2, AlertCircle, CheckCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
-const AICropAdvisorInputSchema = z.object({
+const AICropAdvisorInputClientSchema = z.object({
   soilType: z.string().min(3, 'Soil type must be at least 3 characters').describe('The type of soil on the farm.'),
-  region: z.string().min(3, 'Region must be at least 3 characters').describe('The geographical region of the farm.'),
+  region: z.string().min(3, 'Region or Coordinates must be at least 3 characters').describe('The geographical region (e.g., "Central Valley") or coordinates (e.g., "Lat: 34.05, Lon: -118.24") of the farm.'),
   cropHistory: z.string().min(10, 'Crop history must be at least 10 characters').describe('The history of crops grown on the farm.'),
-  weatherData: z.string().min(10, 'Weather data summary must be at least 10 characters').describe('Real-time weather data for the farm.'),
-  marketData: z.string().min(10, 'Market data summary must be at least 10 characters').describe('Real-time market data for crops.'),
+  weatherData: z.string().min(10, 'Weather data summary must be at least 10 characters').describe('Summary of current weather conditions for the farm.'),
+  marketData: z.string().min(10, 'Market data summary must be at least 10 characters').describe('Summary of current market data/trends for relevant crops.'),
 });
 
-export default function AICropAdvisorSection() {
+// Ensure this type matches the schema used in the flow
+type AICropAdvisorFormValues = z.infer<typeof AICropAdvisorInputClientSchema>;
+
+interface AICropAdvisorSectionProps {
+  initialRegion?: string;
+  initialWeatherSummary?: string;
+  initialMarketSummary?: string;
+}
+
+export default function AICropAdvisorSection({
+  initialRegion,
+  initialWeatherSummary,
+  initialMarketSummary,
+}: AICropAdvisorSectionProps) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AICropAdvisorOutput | null>(null);
   const { toast } = useToast();
 
-  const form = useForm<AICropAdvisorInput>({
-    resolver: zodResolver(AICropAdvisorInputSchema),
+  const form = useForm<AICropAdvisorFormValues>({
+    resolver: zodResolver(AICropAdvisorInputClientSchema),
     defaultValues: {
       soilType: '',
-      region: '',
+      region: initialRegion || '',
       cropHistory: '',
-      weatherData: '',
-      marketData: '',
+      weatherData: initialWeatherSummary || '',
+      marketData: initialMarketSummary || '',
     },
   });
 
-  const onSubmit: SubmitHandler<AICropAdvisorInput> = (data) => {
+  useEffect(() => {
+    if (initialRegion) form.setValue('region', initialRegion, { shouldValidate: true });
+  }, [initialRegion, form]);
+
+  useEffect(() => {
+    if (initialWeatherSummary) form.setValue('weatherData', initialWeatherSummary, { shouldValidate: true });
+  }, [initialWeatherSummary, form]);
+
+  useEffect(() => {
+    if (initialMarketSummary) form.setValue('marketData', initialMarketSummary, { shouldValidate: true });
+  }, [initialMarketSummary, form]);
+
+
+  const onSubmit: SubmitHandler<AICropAdvisorFormValues> = (data) => {
     setError(null);
     setResult(null);
     startTransition(async () => {
       try {
-        const response = await aiCropAdvisor(data);
+        // Ensure the data passed matches AICropAdvisorInput type from the flow
+        const flowInput: AICropAdvisorInput = {
+            soilType: data.soilType,
+            region: data.region,
+            cropHistory: data.cropHistory,
+            weatherData: data.weatherData,
+            marketData: data.marketData,
+        };
+        const response = await aiCropAdvisor(flowInput);
         setResult(response);
         toast({
           title: "AI Advisor Success",
@@ -70,7 +105,7 @@ export default function AICropAdvisorSection() {
           <Wand2 className="h-7 w-7 text-primary" />
           <CardTitle className="text-xl font-semibold">AI Crop Advisor</CardTitle>
         </div>
-        <CardDescription>Get personalized crop suggestions based on your farm's data.</CardDescription>
+        <CardDescription>Get personalized crop suggestions. Fields like Region, Weather, and Market Data may be auto-filled from other dashboard widgets.</CardDescription>
       </CardHeader>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)}>
@@ -94,9 +129,9 @@ export default function AICropAdvisorSection() {
                 name="region"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Region</FormLabel>
+                    <FormLabel>Region / Coordinates</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., Central Valley, Midwest" {...field} />
+                      <Input placeholder="e.g., Central Valley or Lat: 34.05, Lon: -118.24" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -136,7 +171,7 @@ export default function AICropAdvisorSection() {
                 <FormItem>
                   <FormLabel>Current Market Data Summary</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="Summarize relevant market trends (e.g., High demand for organic produce, corn prices stable, soybean prices volatile)" {...field} rows={3} />
+                    <Textarea placeholder="Summarize relevant market trends (e.g., High demand for organic produce, corn prices stable)" {...field} rows={3} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

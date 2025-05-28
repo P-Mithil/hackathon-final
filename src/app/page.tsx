@@ -1,11 +1,54 @@
+
+"use client";
+import React, { useState, useCallback } from 'react';
 import Header from '@/components/dashboard/Header';
 import WeatherWidget from '@/components/dashboard/WeatherWidget';
 import PestAlertsWidget from '@/components/dashboard/PestAlertsWidget';
 import AICropAdvisorSection from '@/components/dashboard/AICropAdvisorSection';
 import MarketTrendsWidget from '@/components/dashboard/MarketTrendsWidget';
 import { Separator } from '@/components/ui/separator';
+import type { GetWeatherOutput } from '@/ai/flows/get-weather-flow';
+import type { GetMarketTrendsOutput } from '@/ai/flows/getMarketTrendsFlow';
+
+const DEFAULT_LATITUDE = 34.0522; // Los Angeles
+const DEFAULT_LONGITUDE = -118.2437;
 
 export default function DashboardPage() {
+  const [currentLocation, setCurrentLocation] = useState<{ lat: number; lon: number }>({
+    lat: DEFAULT_LATITUDE,
+    lon: DEFAULT_LONGITUDE,
+  });
+  const [weatherSummaryForAdvisor, setWeatherSummaryForAdvisor] = useState<string>('');
+  const [marketSummaryForAdvisor, setMarketSummaryForAdvisor] = useState<string>('');
+  const [regionForAdvisor, setRegionForAdvisor] = useState<string>(`Lat: ${DEFAULT_LATITUDE.toFixed(4)}, Lon: ${DEFAULT_LONGITUDE.toFixed(4)}`);
+
+  const handleLocationChange = useCallback((lat: number, lon: number) => {
+    setCurrentLocation({ lat, lon });
+    setRegionForAdvisor(`Lat: ${lat.toFixed(4)}, Lon: ${lon.toFixed(4)}`);
+  }, []);
+
+  const handleWeatherFetched = useCallback((weather: GetWeatherOutput | null) => {
+    if (weather) {
+      setWeatherSummaryForAdvisor(
+        `${weather.weatherDescription}, Temp: ${weather.temperature}°C, Humidity: ${weather.humidity}%, Wind: ${weather.windSpeed} km/h, Precip: ${weather.precipitationProbability}%`
+      );
+    } else {
+      setWeatherSummaryForAdvisor('Weather data currently unavailable for AI Advisor.');
+    }
+  }, []);
+
+  const handleMarketDataFetched = useCallback((marketData: GetMarketTrendsOutput | null) => {
+    if (marketData && marketData.marketSummary) {
+      setMarketSummaryForAdvisor(marketData.marketSummary);
+    } else if (marketData && marketData.regionalCrops && marketData.regionalCrops.length > 0) {
+        setMarketSummaryForAdvisor('General market summary unavailable, but crop-specific trends were found.');
+    }
+     else {
+      setMarketSummaryForAdvisor('Market data currently unavailable for AI Advisor.');
+    }
+  }, []);
+
+
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground">
       <Header />
@@ -14,8 +57,19 @@ export default function DashboardPage() {
         <section aria-labelledby="environmental-overview">
           <h2 id="environmental-overview" className="text-2xl font-semibold mb-4 text-primary tracking-tight">Environmental Overview</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <WeatherWidget className="md:col-span-1" />
-            <PestAlertsWidget className="md:col-span-1" />
+            <WeatherWidget 
+              className="md:col-span-1" 
+              initialLatitude={currentLocation.lat}
+              initialLongitude={currentLocation.lon}
+              onLocationChange={handleLocationChange}
+              onWeatherFetched={handleWeatherFetched}
+            />
+            <PestAlertsWidget 
+              className="md:col-span-1" 
+              initialLatitude={currentLocation.lat}
+              initialLongitude={currentLocation.lon}
+              onLocationChange={handleLocationChange}
+            />
           </div>
         </section>
 
@@ -24,11 +78,20 @@ export default function DashboardPage() {
         <section aria-labelledby="decision-support" className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
           <div className="lg:col-span-3">
             <h2 id="decision-support-ai" className="text-2xl font-semibold mb-4 text-primary tracking-tight">AI Decision Support</h2>
-            <AICropAdvisorSection />
+            <AICropAdvisorSection 
+              initialRegion={regionForAdvisor}
+              initialWeatherSummary={weatherSummaryForAdvisor}
+              initialMarketSummary={marketSummaryForAdvisor}
+            />
           </div>
           <div className="lg:col-span-2">
             <h2 id="decision-support-market" className="text-2xl font-semibold mb-4 text-primary tracking-tight">Market Insights</h2>
-            <MarketTrendsWidget />
+            <MarketTrendsWidget 
+              initialLatitude={currentLocation.lat}
+              initialLongitude={currentLocation.lon}
+              onLocationChange={handleLocationChange}
+              onMarketDataFetched={handleMarketDataFetched}
+            />
           </div>
         </section>
         
