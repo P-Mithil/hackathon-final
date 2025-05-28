@@ -1,0 +1,20 @@
+
+{
+  "headerTitle": "AgriVision Dashboard",
+  "loginPageTitle": "Welcome to AgriVision",
+  "loginPageDescription": "Sign in or create an account to access your dashboard.",
+  "signInButton": "Sign In",
+  "signUpButton": "Sign Up",
+  "signOutButton": "Sign Out",
+  "language": "Language",
+  "english": "English",
+  "spanish": "Spanish",
+  "weatherWidgetTitle": "Weather Updates",
+  "pestAlertsWidgetTitle": "Pest Alerts & Advisory",
+  "marketTrendsWidgetTitle": "Market Trends & Recommendation",
+  "aiCropAdvisorTitle": "AI Crop Advisor",
+  "environmentalOverviewTitle": "Environmental Overview",
+  "aiDecisionSupportTitle": "AI Decision Support",
+  "marketInsightsTitle": "Market Insights",
+  "footerText": "AgriVision Dashboard © {{year}}"
+}

@@ -9,14 +9,16 @@ import MarketTrendsWidget from '@/components/dashboard/MarketTrendsWidget';
 import { Separator } from '@/components/ui/separator';
 import type { GetWeatherOutput } from '@/ai/flows/get-weather-flow';
 import type { GetMarketTrendsOutput } from '@/ai/flows/getMarketTrendsFlow';
-import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext'; // Changed to SupabaseAuth
+import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import { Loader2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 const DEFAULT_LATITUDE = 34.0522; // Los Angeles
 const DEFAULT_LONGITUDE = -118.2437;
 
 export default function DashboardPage() {
-  const { user, loading: authLoading } = useSupabaseAuth(); // Changed currentUser to user
+  const { user, loading: authLoading } = useSupabaseAuth();
+  const { t } = useTranslation();
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lon: number }>({
     lat: DEFAULT_LATITUDE,
     lon: DEFAULT_LONGITUDE,
@@ -24,6 +26,7 @@ export default function DashboardPage() {
   const [weatherSummaryForAdvisor, setWeatherSummaryForAdvisor] = useState<string>('');
   const [marketSummaryForAdvisor, setMarketSummaryForAdvisor] = useState<string>('');
   const [regionForAdvisor, setRegionForAdvisor] = useState<string>(`Lat: ${DEFAULT_LATITUDE.toFixed(4)}, Lon: ${DEFAULT_LONGITUDE.toFixed(4)}`);
+  const currentYear = new Date().getFullYear();
 
   const handleLocationChange = useCallback((lat: number, lon: number) => {
     setCurrentLocation({ lat, lon });
@@ -51,8 +54,7 @@ export default function DashboardPage() {
     }
   }, []);
 
-  if (authLoading || !user) { // Changed currentUser to user
-    // SupabaseAuthProvider will redirect if not logged in. This is a fallback or while redirecting.
+  if (authLoading || !user) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <Loader2 className="h-16 w-16 animate-spin text-primary" />
@@ -66,7 +68,7 @@ export default function DashboardPage() {
       <main className="flex-grow container mx-auto p-4 md:p-6 lg:p-8 space-y-8">
         
         <section aria-labelledby="environmental-overview">
-          <h2 id="environmental-overview" className="text-2xl font-semibold mb-4 text-primary tracking-tight">Environmental Overview</h2>
+          <h2 id="environmental-overview" className="text-2xl font-semibold mb-4 text-primary tracking-tight">{t('environmentalOverviewTitle')}</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <WeatherWidget 
               className="md:col-span-1" 
@@ -88,7 +90,7 @@ export default function DashboardPage() {
 
         <section aria-labelledby="decision-support" className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
           <div className="lg:col-span-3">
-            <h2 id="decision-support-ai" className="text-2xl font-semibold mb-4 text-primary tracking-tight">AI Decision Support</h2>
+            <h2 id="decision-support-ai" className="text-2xl font-semibold mb-4 text-primary tracking-tight">{t('aiDecisionSupportTitle')}</h2>
             <AICropAdvisorSection 
               initialRegion={regionForAdvisor}
               initialWeatherSummary={weatherSummaryForAdvisor}
@@ -96,7 +98,7 @@ export default function DashboardPage() {
             />
           </div>
           <div className="lg:col-span-2">
-            <h2 id="decision-support-market" className="text-2xl font-semibold mb-4 text-primary tracking-tight">Market Insights</h2>
+            <h2 id="decision-support-market" className="text-2xl font-semibold mb-4 text-primary tracking-tight">{t('marketInsightsTitle')}</h2>
             <MarketTrendsWidget 
               initialLatitude={currentLocation.lat}
               initialLongitude={currentLocation.lon}
@@ -108,7 +110,7 @@ export default function DashboardPage() {
         
       </main>
       <footer className="text-center p-6 text-muted-foreground text-sm border-t mt-auto">
-        AgriVision Dashboard &copy; {new Date().getFullYear()}
+        {t('footerText', { year: currentYear })}
       </footer>
     </div>
   );

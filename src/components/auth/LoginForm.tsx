@@ -9,17 +9,16 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/lib/supabase'; // Import Supabase client
+import { supabase } from '@/lib/supabase';
 import { Loader2, LogIn, UserPlus, AlertCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-// We don't import useSupabaseAuth here as LoginForm is usually outside the provider on the login page itself.
-// We'll call supabase methods directly.
+import { useTranslation } from 'react-i18next'; // Import useTranslation
 
 const LoginSchema = z.object({
   email: z.string().email('Invalid email address').min(1, 'Email is required'),
   password: z.string().min(6, 'Password must be at least 6 characters').min(1, 'Password is required'),
-  displayName: z.string().min(2, 'Display name must be at least 2 characters').optional(), // For sign up
+  displayName: z.string().min(2, 'Display name must be at least 2 characters').optional(),
 });
 
 type LoginFormValues = z.infer<typeof LoginSchema>;
@@ -29,6 +28,7 @@ export default function LoginForm() {
   const [authError, setAuthError] = useState<string | null>(null);
   const { toast } = useToast();
   const router = useRouter();
+  const { t } = useTranslation(); // Initialize useTranslation
 
   const { register, handleSubmit, formState: { errors }, watch } = useForm<LoginFormValues>({
     resolver: zodResolver(LoginSchema),
@@ -55,13 +55,12 @@ export default function LoginForm() {
               });
              return;
           }
-          // Supabase sign up
           const { error } = await supabase.auth.signUp({
             email: data.email,
             password: data.password,
             options: {
               data: {
-                display_name: data.displayName, // Store display name in user_metadata
+                display_name: data.displayName,
               },
             },
           });
@@ -73,11 +72,8 @@ export default function LoginForm() {
             description: 'Please check your email to confirm your account if email confirmation is enabled.',
             variant: 'default',
           });
-          // Supabase redirects or handles session automatically.
-          // Router push might not be needed if onAuthStateChange handles it, but good for immediate feedback.
           router.push('/');
         } else {
-          // Supabase sign in
           const { error } = await supabase.auth.signInWithPassword({
             email: data.email,
             password: data.password,
@@ -94,7 +90,6 @@ export default function LoginForm() {
         }
       } catch (error: any) {
         let friendlyMessage = error.message || 'An unknown error occurred. Please try again.';
-        // Supabase specific error handling can be more granular if needed
         if (error.message?.includes('Invalid login credentials')) {
           friendlyMessage = 'Invalid email or password. Please try again.';
         } else if (error.message?.includes('User already registered')) {
@@ -177,7 +172,7 @@ export default function LoginForm() {
           className="w-full bg-primary hover:bg-primary/90"
         >
           {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LogIn className="mr-2 h-4 w-4" />}
-          Sign In
+          {t('signInButton')} {/* Translate button text */}
         </Button>
         <Button
           type="button"
@@ -187,7 +182,7 @@ export default function LoginForm() {
           className="w-full"
         >
           {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />}
-          Sign Up
+          {t('signUpButton')} {/* Translate button text */}
         </Button>
       </div>
     </form>

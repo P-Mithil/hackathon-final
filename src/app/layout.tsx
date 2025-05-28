@@ -1,10 +1,10 @@
+
 import type {Metadata} from 'next';
 import {Geist, Geist_Mono} from 'next/font/google';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
-// Remove Firebase AuthProvider import
-// import { AuthProvider } from '@/contexts/AuthContext'; 
-import { SupabaseAuthProvider } from '@/contexts/SupabaseAuthContext'; // Add Supabase AuthProvider import
+import { SupabaseAuthProvider } from '@/contexts/SupabaseAuthContext';
+import I18nInitializer from '@/components/I18nInitializer'; // Import the I18nInitializer
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'AgriVision Dashboard',
+  title: 'AgriVision Dashboard', // This title can also be translated if needed, usually in page.tsx
   description: 'Personalized crop advisory and market trends for farmers.',
 };
 
@@ -29,10 +29,11 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased h-full`}>
-        {/* Replace AuthProvider with SupabaseAuthProvider */}
-        <SupabaseAuthProvider>
-          {children}
-        </SupabaseAuthProvider>
+        <I18nInitializer> {/* Wrap with I18nInitializer */}
+          <SupabaseAuthProvider>
+            {children}
+          </SupabaseAuthProvider>
+        </I18nInitializer>
         <Toaster />
       </body>
     </html>
