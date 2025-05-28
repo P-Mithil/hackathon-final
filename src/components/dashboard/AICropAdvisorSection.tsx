@@ -4,7 +4,7 @@
 import React, { useState, useTransition, useEffect } from 'react';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod'; // Added missing import
+import { z } from 'zod';
 
 // Import SpeechRecognition type (for TypeScript recognition)
 declare global {
@@ -65,13 +65,41 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '@/components/ui/select';
 import { Loader2, Wand2, AlertCircle, CheckCircle, Mic, StopCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { supabase } from '@/lib/supabase'; // Import Supabase client
 import { useTranslation } from 'react-i18next';
+import { useTranslation as useI18nTranslation } from 'react-i18next';
+// Helper function to get language code based on region (moved outside component)
+const getLanguageCode = (region: string): string => {
+  const lowerRegion = region.toLowerCase();
+  if (lowerRegion.includes('india') || lowerRegion.includes('hindi')) return 'hi-IN';
+  if (lowerRegion.includes('spain') || lowerRegion.includes('spanish')) return 'es-ES';
+  if (lowerRegion.includes('telugu')) return 'te-IN';
+  return 'en-US'; // Default to English
+};
 
+// Helper function for translations - moved outside component to avoid circular dependency
+const getTranslationHelper = (t: any, key: string, fallback: string) => {
+  const translation = t(key);
+  return translation === key ? fallback : translation;
+};
+
+// Fixed schema - removed duplicate soilType field
 const AICropAdvisorInputClientSchema = z.object({
-  soilType: z.string().min(3, 'Soil type must be at least 3 characters').describe('The type of soil on the farm.'),
+  soilType: z.union([
+    z.literal(''), // Allow empty string for initial state
+    z.literal('Clay'),
+    z.literal('Sandy'),
+    z.literal('Loam'),
+    z.literal('Silt'),
+    z.literal('Peat'),
+    z.literal('Chalk'),
+    z.literal('Shale'),
+  ]).refine(val => val !== '', { message: 'Please select a valid soil type' })
+    .describe('The type of soil on the farm.'),
   region: z.string().min(3, 'Region or Coordinates must be at least 3 characters').describe('The geographical region (e.g., "Central Valley") or coordinates (e.g., "Lat: 34.05, Lon: -118.24") of the farm.'),
   cropHistory: z.string().min(10, 'Crop history must be at least 10 characters').describe('The history of crops grown on the farm.'),
   weatherData: z.string().min(10, 'Weather data summary must be at least 10 characters').describe('Summary of current weather conditions for the farm.'),
@@ -86,31 +114,23 @@ interface AICropAdvisorSectionProps {
   initialMarketSummary?: string;
 }
 
-// Helper function to get language code based on region (moved outside component)
-const getLanguageCode = (region: string): string => {
-  const lowerRegion = region.toLowerCase();
-  if (lowerRegion.includes('india') || lowerRegion.includes('hindi')) return 'hi-IN';
-  if (lowerRegion.includes('spain') || lowerRegion.includes('spanish')) return 'es-ES';
-  if (lowerRegion.includes('telugu')) return 'te-IN';
-  return 'en-US'; // Default to English
-};
-
 export default function AICropAdvisorSection({
   initialRegion,
   initialWeatherSummary,
   initialMarketSummary,
 }: AICropAdvisorSectionProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useI18nTranslation();
   
-  // Fallback function for translations
+  // Moved getTranslation function to use the helper
   const getTranslation = (key: string, fallback: string) => {
-    const translation = t(key);
-    return translation === key ? fallback : translation;
+    return getTranslationHelper(t, key, fallback);
   };
+
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AICropAdvisorOutput | null>(null);
   const { toast } = useToast();
+  const [feedback, setFeedback] = useState<string>('');
 
   // State for speech recognition
   const [isListening, setIsListening] = useState(false);
@@ -119,7 +139,7 @@ export default function AICropAdvisorSection({
   const form = useForm<AICropAdvisorFormValues>({
     resolver: zodResolver(AICropAdvisorInputClientSchema),
     defaultValues: {
-      soilType: '',
+ soilType: '',
       region: initialRegion || '',
       cropHistory: '',
       weatherData: initialWeatherSummary || '',
@@ -145,9 +165,9 @@ export default function AICropAdvisorSection({
 
     if (SpeechRecognitionClass) {
       const recognition = new SpeechRecognitionClass();
-      // Set language based on the region if it's not coordinates, otherwise default to English
       const region = form.getValues('region');
-      recognition.lang = region && !region.startsWith('Lat:') ? getLanguageCode(region) : 'en-US';
+      // Set language based on the current i18n resolved language
+      recognition.lang = i18n.resolvedLanguage;
       recognition.interimResults = true;
       recognition.continuous = false;
 
@@ -250,6 +270,48 @@ export default function AICropAdvisorSection({
     }
   };
 
+  const saveCropAdvisorHistory = async (historyData: any) => {
+    const { data, error } = await supabase
+      .from('crop_advisor_history') // Use the chosen table name
+      .insert([historyData]);
+
+    if (error) {
+      console.error('Error saving crop advisor history:', JSON.stringify(error, null, 2));
+      toast({
+        title: 'Save Failed',
+        description: 'Could not save AI recommendations and feedback.',
+        variant: "destructive",
+      });
+    } else {
+      console.log('Crop advisor history saved successfully:', data);
+      toast({
+        title: 'Saved',
+        description: 'AI recommendations and feedback saved.',
+        variant: "default",
+      });
+    }
+  };
+
+  const handleSave = async () => {
+    // We need the user ID to associate the history with the logged-in user
+    const { data: { user } } = await supabase.auth.getUser();
+    const formValues = form.getValues();
+
+    const savedData: any = { // Use \'any\' for now to match Supabase insert type, refine later with proper type
+      user_id: user?.id, // Get user ID from Supabase auth
+      soiltype: formValues.soilType, // Corrected to lowercase
+      region: formValues.region,
+      crophistory: formValues.cropHistory,
+      weatherdata: formValues.weatherData, // Corrected to lowercase
+      marketdata: formValues.marketData, // Corrected to lowercase
+      cropsuggestions: result?.cropSuggestions,
+      rationale: result?.rationale,
+      feedback: feedback,
+    };
+    await saveCropAdvisorHistory(savedData);
+  };
+
+
   const onSubmit: SubmitHandler<AICropAdvisorFormValues> = (data) => {
     setError(null);
     setResult(null);
@@ -301,7 +363,16 @@ export default function AICropAdvisorSection({
                   <FormItem>
                     <FormLabel>{getTranslation('soilTypeLabel', 'Soil Type')}</FormLabel>
                     <FormControl>
-                      <Input placeholder={getTranslation('soilTypePlaceholder', 'e.g., Clay, Sandy, Loam')} {...field} />
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <SelectTrigger>
+                          <SelectValue placeholder={getTranslation('soilTypePlaceholder', 'Select soil type')} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {['Clay', 'Sandy', 'Loam', 'Silt', 'Peat', 'Chalk', 'Shale'].map((soil) => (
+                            <SelectItem key={soil} value={soil}>{soil}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -379,6 +450,20 @@ export default function AICropAdvisorSection({
                 </FormItem>
               )}
             />
+            {result && (
+              <FormField
+                name="feedback"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{getTranslation('feedbackLabel', 'Your Feedback')}</FormLabel>
+                    <FormControl>
+                      <Textarea placeholder={getTranslation('feedbackPlaceholder', 'Provide feedback on the AI recommendations (optional)')} {...field} rows={3} onChange={(e) => setFeedback(e.target.value)} value={feedback} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
           </CardContent>
           <CardFooter className="flex justify-end">
             <Button type="submit" disabled={isPending} className="bg-accent hover:bg-accent/90 text-accent-foreground">
@@ -389,6 +474,9 @@ export default function AICropAdvisorSection({
               )}
               {getTranslation('getSuggestionsButton', 'Get AI Suggestions')}
             </Button>
+            {result && (
+              <Button type="button" variant="secondary" onClick={handleSave} className="ml-2">Save</Button>
+            )}
           </CardFooter>
         </form>
       </Form>

@@ -69,7 +69,7 @@ export default function DashboardPage() {
         
         <section aria-labelledby="environmental-overview">
           <h2 id="environmental-overview" className="text-2xl font-semibold mb-4 text-primary tracking-tight">{t('environmentalOverviewTitle')}</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-6">
             <WeatherWidget 
               className="md:col-span-1" 
               initialLatitude={currentLocation.lat}

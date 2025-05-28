@@ -19,6 +19,7 @@ import {
 import { LineChart, Line, CartesianGrid, XAxis, YAxis } from "recharts";
 import { useTranslation } from 'react-i18next';
 
+import FeedbackSection from "./FeedbackSection";
 interface MarketTrendsWidgetProps {
   className?: string;
   initialLatitude?: number;
@@ -428,6 +429,7 @@ export default function MarketTrendsWidget({
             <p>{t('noMarketTrendData')}</p>
           </div>
         )}
+        <FeedbackSection />
       </CardContent>
        <CardFooter className="p-4 border-t">
          <p className="text-xs text-muted-foreground">{t('marketTrendsFooterDisclaimer')}</p>

@@ -12,3 +12,19 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+export async function getCropAdvisorHistoryForUser(userId: string) {
+  const { data, error } = await supabase
+    .from('crop_advisor_history')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false }); // Fetch newest entries first
+
+  if (error) {
+    console.error('Error fetching crop advisor history:', error);
+    // Return the error object so the UI can handle it
+    return { data: null, error };
+  }
+
+  return { data, error: null };
+}
