@@ -1,6 +1,6 @@
 
 "use client";
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import Header from '@/components/dashboard/Header';
 import WeatherWidget from '@/components/dashboard/WeatherWidget';
 import PestAlertsWidget from '@/components/dashboard/PestAlertsWidget';
@@ -9,11 +9,14 @@ import MarketTrendsWidget from '@/components/dashboard/MarketTrendsWidget';
 import { Separator } from '@/components/ui/separator';
 import type { GetWeatherOutput } from '@/ai/flows/get-weather-flow';
 import type { GetMarketTrendsOutput } from '@/ai/flows/getMarketTrendsFlow';
+import { useAuth } from '@/contexts/AuthContext';
+import { Loader2 } from 'lucide-react';
 
 const DEFAULT_LATITUDE = 34.0522; // Los Angeles
 const DEFAULT_LONGITUDE = -118.2437;
 
 export default function DashboardPage() {
+  const { currentUser, loading: authLoading } = useAuth();
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lon: number }>({
     lat: DEFAULT_LATITUDE,
     lon: DEFAULT_LONGITUDE,
@@ -28,7 +31,7 @@ export default function DashboardPage() {
   }, []);
 
   const handleWeatherFetched = useCallback((weather: GetWeatherOutput | null) => {
-    if (weather) {
+    if (weather && weather.weatherDescription !== "Unavailable") {
       setWeatherSummaryForAdvisor(
         `${weather.weatherDescription}, Temp: ${weather.temperature}°C, Humidity: ${weather.humidity}%, Wind: ${weather.windSpeed} km/h, Precip: ${weather.precipitationProbability}%`
       );
@@ -48,6 +51,14 @@ export default function DashboardPage() {
     }
   }, []);
 
+  if (authLoading || !currentUser) {
+    // AuthProvider will redirect if not logged in. This is a fallback or while redirecting.
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <Loader2 className="h-16 w-16 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground">
@@ -68,7 +79,7 @@ export default function DashboardPage() {
               className="md:col-span-1" 
               initialLatitude={currentLocation.lat}
               initialLongitude={currentLocation.lon}
-              onLocationChange={handleLocationChange}
+              onLocationChange={handleLocationChange} // Pass location change handler
             />
           </div>
         </section>
@@ -89,7 +100,7 @@ export default function DashboardPage() {
             <MarketTrendsWidget 
               initialLatitude={currentLocation.lat}
               initialLongitude={currentLocation.lon}
-              onLocationChange={handleLocationChange}
+              onLocationChange={handleLocationChange} // Pass location change handler
               onMarketDataFetched={handleMarketDataFetched}
             />
           </div>

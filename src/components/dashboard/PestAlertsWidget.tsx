@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useTransition, useCallback } from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, Bug, CheckCircle2, Info, Loader2, LocateFixed, MapPin, ShieldAlert, ShieldCheck, ShieldQuestion } from "lucide-react";
@@ -23,7 +23,7 @@ const getRiskIcon = (riskLevel: PestAlertItem['riskLevel'] | undefined) => {
     case 'High':
       return <AlertTriangle className="h-5 w-5 mr-3 mt-0.5 text-destructive flex-shrink-0" />;
     case 'Medium':
-      return <ShieldAlert className="h-5 w-5 mr-3 mt-0.5 text-accent-foreground flex-shrink-0" />;
+      return <ShieldAlert className="h-5 w-5 mr-3 mt-0.5 text-yellow-600 flex-shrink-0" />; // Changed to yellow-600 for better contrast with accent-foreground
     case 'Low':
       return <ShieldCheck className="h-5 w-5 mr-3 mt-0.5 text-primary flex-shrink-0" />;
     case 'Info':
@@ -33,7 +33,7 @@ const getRiskIcon = (riskLevel: PestAlertItem['riskLevel'] | undefined) => {
   }
 };
 
-const getRiskBadgeVariant = (riskLevel: PestAlertItem['riskLevel'] | undefined) => {
+const getRiskBadgeVariant = (riskLevel: PestAlertItem['riskLevel'] | undefined): VariantProps<typeof Badge>["variant"] => {
   switch (riskLevel) {
     case 'High': return "destructive";
     case 'Medium': return "default"; 
@@ -72,11 +72,7 @@ export default function PestAlertsWidget({
         setInputLatitude(lat.toString());
         setInputLongitude(lon.toString());
         onLocationChange?.(lat, lon);
-        toast({
-          title: "Pest Alerts Updated",
-          description: `Fetched alerts for Lat: ${lat.toFixed(2)}, Lon: ${lon.toFixed(2)}`,
-          variant: "default"
-        });
+        // Toast moved to tryAutoDetectLocation and handleFetchManualAlerts for specific action context
       } catch (e) {
         const errorMessage = e instanceof Error ? e.message : "Failed to fetch pest alerts.";
         setError(errorMessage);
@@ -86,7 +82,7 @@ export default function PestAlertsWidget({
           variant: "destructive",
         });
         setPestData(null); 
-        onLocationChange?.(lat, lon); // Still report location used
+        onLocationChange?.(lat, lon);
       }
     });
   }, [toast, startTransition, onLocationChange]);
@@ -95,7 +91,7 @@ export default function PestAlertsWidget({
     if (!navigator.geolocation) {
       toast({
         title: "Geolocation Not Supported",
-        description: "Browser doesn't support geolocation. Enter location manually.",
+        description: "Browser doesn't support geolocation. Using default location.",
         variant: "default",
       });
       fetchPestAlertsForLocation(initialLatitude, initialLongitude);
@@ -128,18 +124,39 @@ export default function PestAlertsWidget({
   }, [toast, fetchPestAlertsForLocation, initialLatitude, initialLongitude]);
 
   useEffect(() => {
-    tryAutoDetectLocation();
+    // Only call auto-detect if onLocationChange is provided (meaning it's managed by parent)
+    // This prevents double-fetching if page.tsx also calls it.
+    // However, for standalone use, or if page.tsx is not yet updated, this line is useful.
+    // For now, let's assume page.tsx might handle initial fetch for this widget too.
+    // If not, uncomment the line below.
+    // tryAutoDetectLocation(); 
+    
+    // If initial lat/lon are explicitly provided by parent, use them.
+    if (onLocationChange) { // If parent controls it, parent should trigger first fetch
+        fetchPestAlertsForLocation(initialLatitude, initialLongitude);
+    } else { // If standalone, fetch itself
+        tryAutoDetectLocation();
+    }
      // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run once on mount
+  }, [initialLatitude, initialLongitude]); // Re-fetch if parent changes initial lat/lon
 
 
-  // Effect to update local state if initial lat/lon props change from parent
+  // Effect to update local state if initial lat/lon props change from parent AND
+  // the widget is not currently trying to locate or fetch (to avoid race conditions)
   useEffect(() => {
-    setCurrentLatitude(initialLatitude);
-    setInputLatitude(initialLatitude.toString());
-    setCurrentLongitude(initialLongitude);
-    setInputLongitude(initialLongitude.toString());
-  }, [initialLatitude, initialLongitude]);
+    if (!isLocating && !isPending) {
+        if (currentLatitude !== initialLatitude || currentLongitude !== initialLongitude) {
+            setCurrentLatitude(initialLatitude);
+            setInputLatitude(initialLatitude.toString());
+            setCurrentLongitude(initialLongitude);
+            setInputLongitude(initialLongitude.toString());
+            // Fetch only if explicitly told to by parent, or if it's standalone
+            if (onLocationChange || (!onLocationChange && (initialLatitude !== DEFAULT_LATITUDE || initialLongitude !== DEFAULT_LONGITUDE))) {
+               fetchPestAlertsForLocation(initialLatitude, initialLongitude);
+            }
+        }
+    }
+  }, [initialLatitude, initialLongitude, isLocating, isPending, currentLatitude, currentLongitude, fetchPestAlertsForLocation, onLocationChange]);
 
 
   const handleFetchManualAlerts = () => {
@@ -154,14 +171,23 @@ export default function PestAlertsWidget({
       });
       return;
     }
+    toast({
+      title: "Pest Alerts Requested",
+      description: `Fetching alerts for Lat: ${lat.toFixed(2)}, Lon: ${lon.toFixed(2)}`,
+      variant: "default"
+    });
     fetchPestAlertsForLocation(lat, lon);
   };
 
   return (
     <Card className={cn("shadow-lg rounded-xl overflow-hidden flex flex-col", className)}>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 bg-card hover:bg-muted/50 transition-colors">
-        <CardTitle className="text-lg font-semibold text-card-foreground">Pest Alerts &amp; Advisory</CardTitle>
-        <Bug className="h-7 w-7 text-destructive" />
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+            <CardTitle className="text-xl font-semibold text-card-foreground flex items-center">
+                <Bug className="h-6 w-6 mr-2 text-destructive" /> Pest Alerts &amp; Advisory
+            </CardTitle>
+        </div>
+        <CardDescription>AI-generated pest insights for the selected region.</CardDescription>
       </CardHeader>
       <CardContent className="p-6 flex-grow">
         <div className="mb-4 space-y-2">
@@ -200,7 +226,7 @@ export default function PestAlertsWidget({
           </Button>
         </div>
         
-        <p className="text-xs text-muted-foreground mb-4">Location: Lat: {currentLatitude.toFixed(2)}, Lon: {currentLongitude.toFixed(2)}</p>
+        <p className="text-xs text-muted-foreground mb-4">Displaying alerts for: Lat: {currentLatitude.toFixed(2)}, Lon: {currentLongitude.toFixed(2)}</p>
 
 
         {isPending && !pestData ? (
@@ -217,7 +243,7 @@ export default function PestAlertsWidget({
         ) : pestData && pestData.alerts.length > 0 ? (
           <div className="space-y-4">
             {pestData.alerts.map((alert, index) => (
-              <div key={index} className="flex items-start p-3 rounded-lg bg-card border">
+              <div key={index} className="flex items-start p-3 rounded-lg bg-card border shadow-sm">
                 {getRiskIcon(alert.riskLevel)}
                 <div className="flex-1">
                   <div className="flex justify-between items-center mb-1">
@@ -225,13 +251,13 @@ export default function PestAlertsWidget({
                     <Badge variant={getRiskBadgeVariant(alert.riskLevel)}>{alert.riskLevel}</Badge>
                   </div>
                   <p className="text-xs text-muted-foreground mb-1">{alert.description}</p>
-                  <p className="text-xs font-semibold">Recommendation:</p>
+                  <p className="text-xs font-semibold text-primary">Recommendation:</p>
                   <p className="text-xs text-muted-foreground">{alert.recommendation}</p>
                 </div>
               </div>
             ))}
             {pestData.generalAdvice && (
-                 <div className="mt-4 p-3 bg-secondary/50 rounded-lg border">
+                 <div className="mt-4 p-3 bg-secondary/30 rounded-lg border">
                     <h4 className="font-semibold text-sm text-secondary-foreground mb-1 flex items-center">
                         <Info className="h-4 w-4 mr-2 text-primary"/>
                         General Pest Prevention Advice
@@ -248,7 +274,7 @@ export default function PestAlertsWidget({
                     No high-priority pest alerts identified for your current location.
                 </p>
                 {pestData.generalAdvice && (
-                     <div className="mt-4 p-3 bg-secondary/50 rounded-lg border text-left">
+                     <div className="mt-4 p-3 bg-secondary/30 rounded-lg border text-left">
                         <h4 className="font-semibold text-sm text-secondary-foreground mb-1 flex items-center">
                             <Info className="h-4 w-4 mr-2 text-primary"/>
                             General Pest Prevention Advice
