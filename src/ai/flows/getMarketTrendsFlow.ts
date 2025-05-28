@@ -53,6 +53,8 @@ const GetMarketTrendsOutputSchema = z.object({
     .describe(
       'A brief general market overview or summary for the agricultural sector in the given location.'
     ),
+  recommendedCrop: z.string().optional().describe('The single crop name from the list that is identified as the most promising or best overall recommendation based on the current analysis. This field can be omitted if no single crop stands out significantly.'),
+  recommendationRationale: z.string().optional().describe('A brief explanation for why the recommendedCrop was chosen as the most promising, or why no specific recommendation was made.'),
 });
 export type GetMarketTrendsOutput = z.infer<typeof GetMarketTrendsOutputSchema>;
 
@@ -73,12 +75,15 @@ For each identified crop, provide the following market insights:
 2.  **Estimated Price**: A realistic, simulated current market price. Include units (e.g., "$250/ton", "€0.80/kg").
 3.  **Price Trend**: Assess the short-term price trend as 'Rising', 'Stable', or 'Falling'.
 4.  **Demand Outlook**: Assess the demand outlook as 'Strong', 'Moderate', or 'Weak'.
-5.  **Volatility**: Assess the market price volatility as 'High', 'Medium', or 'Low'.
+5.  **Volatility**: Assess the market price volatility as 'High', 'Medium', 'Low'.
 6.  **Rationale**: Briefly explain the key factors influencing these trends for the crop in this region.
+
+After analyzing these crops, identify the **Recommended Crop**. This should be the single crop from your list that you believe offers the best overall potential or is most promising for a farmer in this region, considering all factors. Populate the 'recommendedCrop' field with its name.
+Provide a **Recommendation Rationale** explaining why this specific crop is recommended. Populate the 'recommendationRationale' field. If, after your analysis, no single crop stands out as significantly more promising than others, you may omit the 'recommendedCrop' field and briefly explain why in the 'recommendationRationale'.
 
 Additionally, provide a concise **Market Summary** (2-3 sentences) giving a general overview of the agricultural market sentiment or notable conditions for this location.
 
-Focus on common agricultural commodities. If the location is clearly unsuitable for significant agriculture (e.g., deep ocean, polar ice cap, major urban center with no surrounding farmland), state that in the market summary and provide an empty list for regionalCrops.
+Focus on common agricultural commodities. If the location is clearly unsuitable for significant agriculture (e.g., deep ocean, polar ice cap, major urban center with no surrounding farmland), state that in the market summary and recommendation rationale, provide an empty list for regionalCrops, and omit recommendedCrop.
 
 Format your entire response according to the output schema.
 Example for a crop item:
@@ -88,6 +93,17 @@ Example for a crop item:
   demandOutlook: "Moderate"
   volatility: "Medium"
   rationale: "Global supply is steady, biofuel demand provides a floor price, but export competition limits upside."
+
+Example for output structure with recommendation:
+{
+  "regionalCrops": [
+    { "cropName": "Wheat", ... },
+    { "cropName": "Soybeans", ... }
+  ],
+  "marketSummary": "The market is currently stable...",
+  "recommendedCrop": "Soybeans",
+  "recommendationRationale": "Soybeans are recommended due to strong export demand and favorable price trends despite medium volatility."
+}
 `,
 });
 

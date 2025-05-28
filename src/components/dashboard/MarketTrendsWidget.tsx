@@ -5,12 +5,11 @@ import React, { useState, useEffect, useTransition, useCallback } from "react";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, TrendingUp, TrendingDown, MinusSquare, DollarSign, BarChart3, Package, Wind, LocateFixed, MapPin, Loader2, Info, PackageSearch } from "lucide-react";
+import { AlertTriangle, TrendingUp, TrendingDown, MinusSquare, DollarSign, BarChart3, LocateFixed, MapPin, Loader2, Info, Star, Package, SignalHigh, SignalMedium, SignalLow, Zap, ShieldCheck, ShieldAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getMarketTrends, type GetMarketTrendsInput, type GetMarketTrendsOutput, type MarketCropTrendItem } from "@/ai/flows/getMarketTrendsFlow";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 
 interface MarketTrendsWidgetProps {
   className?: string;
@@ -31,32 +30,49 @@ const getTrendIcon = (trend: MarketCropTrendItem['priceTrend'] | undefined) => {
   }
 };
 
-const getDemandOutlookBadgeVariant = (outlook: MarketCropTrendItem['demandOutlook'] | undefined) => {
+const getDemandIcon = (outlook: MarketCropTrendItem['demandOutlook'] | undefined) => {
   switch (outlook) {
     case 'Strong':
-      return 'default'; // often primary color
+      return <SignalHigh className="h-4 w-4 mr-1 text-green-500" />;
     case 'Moderate':
-      return 'secondary';
+      return <SignalMedium className="h-4 w-4 mr-1 text-yellow-500" />;
     case 'Weak':
-      return 'outline'; // or destructive if more fitting
+      return <SignalLow className="h-4 w-4 mr-1 text-red-500" />;
     default:
-      return 'outline';
+      return <MinusSquare className="h-4 w-4 mr-1 text-muted-foreground" />;
+  }
+};
+
+const getVolatilityIcon = (volatility: MarketCropTrendItem['volatility'] | undefined) => {
+  switch (volatility) {
+    case 'High':
+      return <Zap className="h-4 w-4 mr-1 text-red-500" />;
+    case 'Medium':
+      return <ShieldAlert className="h-4 w-4 mr-1 text-yellow-500" />;
+    case 'Low':
+      return <ShieldCheck className="h-4 w-4 mr-1 text-green-500" />;
+    default:
+      return <ShieldQuestion className="h-4 w-4 mr-1 text-muted-foreground" />;
+  }
+};
+
+const getDemandOutlookBadgeVariant = (outlook: MarketCropTrendItem['demandOutlook'] | undefined) => {
+  switch (outlook) {
+    case 'Strong': return 'default'; // often primary color, can be styled to be green
+    case 'Moderate': return 'secondary'; // can be styled to be yellow
+    case 'Weak': return 'destructive'; // can be styled to be red
+    default: return 'outline';
   }
 }
 
 const getVolatilityBadgeVariant = (volatility: MarketCropTrendItem['volatility'] | undefined) => {
    switch (volatility) {
-    case 'High':
-      return 'destructive';
-    case 'Medium':
-      return 'default'; // or a specific accent if available
-    case 'Low':
-      return 'secondary';
-    default:
-      return 'outline';
+    case 'High': return 'destructive';
+    case 'Medium': return 'default'; // using 'default' for medium, typically primary color
+    case 'Low': return 'secondary'; // using 'secondary' for low, often a lighter/muted color
+    default: return 'outline';
   }
 }
-
 
 export default function MarketTrendsWidget({ 
   className,
@@ -100,7 +116,7 @@ export default function MarketTrendsWidget({
         setMarketData(null);
       }
     });
-  }, [toast, startTransition]);
+  }, [toast]);
 
   const tryAutoDetectLocation = useCallback(() => {
     if (!navigator.geolocation) {
@@ -162,9 +178,9 @@ export default function MarketTrendsWidget({
       <CardHeader>
         <div className="flex items-center space-x-2">
           <BarChart3 className="h-7 w-7 text-primary" />
-          <CardTitle className="text-xl font-semibold">Market Trends</CardTitle>
+          <CardTitle className="text-xl font-semibold">Market Trends & Recommendation</CardTitle>
         </div>
-        <CardDescription>AI-generated market insights for key crops in the selected region.</CardDescription>
+        <CardDescription>AI-generated market insights and top crop recommendation for the selected region.</CardDescription>
       </CardHeader>
       <CardContent className="p-6 flex-grow space-y-6">
         <div className="space-y-2">
@@ -216,39 +232,69 @@ export default function MarketTrendsWidget({
             <p className="font-semibold">Error loading market trends</p>
             <p className="text-xs text-center">{error}</p>
           </div>
-        ) : marketData && marketData.regionalCrops.length > 0 ? (
-          <div className="space-y-4">
-            {marketData.regionalCrops.map((crop, index) => (
-              <Card key={index} className="p-4 bg-card border rounded-lg shadow-sm">
+        ) : marketData ? (
+          <>
+            {marketData.recommendedCrop && marketData.recommendationRationale && (
+              <Card className="mb-6 p-4 bg-primary/10 border-primary/30 rounded-lg shadow-md">
                 <CardHeader className="p-0 pb-2">
-                   <CardTitle className="text-lg flex items-center">
-                     <Package className="h-5 w-5 mr-2 text-primary"/>
-                     {crop.cropName}
+                   <CardTitle className="text-lg flex items-center text-primary">
+                     <Star className="h-5 w-5 mr-2 text-accent fill-accent" />
+                     Top Recommendation: {marketData.recommendedCrop}
                    </CardTitle>
                 </CardHeader>
-                <CardContent className="p-0 space-y-2 text-sm">
-                  <div className="flex items-center">
-                    <DollarSign className="h-4 w-4 mr-2 text-muted-foreground" /> 
-                    Price: <span className="font-semibold ml-1">{crop.estimatedPrice}</span>
-                  </div>
-                  <div className="flex items-center">
-                    {getTrendIcon(crop.priceTrend)}
-                    Trend: <Badge variant={crop.priceTrend === 'Rising' ? 'default' : crop.priceTrend === 'Falling' ? 'destructive' : 'secondary'} className="ml-1">{crop.priceTrend}</Badge>
-                  </div>
-                  <div className="flex items-center">
-                     <PackageSearch className="h-4 w-4 mr-2 text-muted-foreground" /> {/* Using PackageSearch for Demand */}
-                     Demand: <Badge variant={getDemandOutlookBadgeVariant(crop.demandOutlook)} className="ml-1">{crop.demandOutlook}</Badge>
-                  </div>
-                  <div className="flex items-center">
-                     <Wind className="h-4 w-4 mr-2 text-muted-foreground" /> {/* Using Wind for Volatility */}
-                     Volatility: <Badge variant={getVolatilityBadgeVariant(crop.volatility)} className="ml-1">{crop.volatility}</Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground pt-1"><span className="font-medium text-foreground">Rationale:</span> {crop.rationale}</p>
+                <CardContent className="p-0">
+                  <p className="text-sm text-foreground">{marketData.recommendationRationale}</p>
                 </CardContent>
               </Card>
-            ))}
+            )}
+
+            {marketData.regionalCrops.length > 0 ? (
+              <div className="space-y-4">
+                <h3 className="text-md font-semibold text-primary mb-2">Detailed Crop Insights:</h3>
+                {marketData.regionalCrops.map((crop, index) => (
+                  <Card key={index} className="p-4 bg-card border rounded-lg shadow-sm">
+                    <CardHeader className="p-0 pb-2">
+                       <CardTitle className="text-lg flex items-center">
+                         <Package className="h-5 w-5 mr-2 text-primary"/>
+                         {crop.cropName}
+                       </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-0 space-y-2 text-sm">
+                      <div className="flex items-center">
+                        <DollarSign className="h-4 w-4 mr-2 text-muted-foreground" /> 
+                        Price: <span className="font-semibold ml-1">{crop.estimatedPrice}</span>
+                      </div>
+                      <div className="flex items-center">
+                        {getTrendIcon(crop.priceTrend)}
+                        Trend: <Badge variant={crop.priceTrend === 'Rising' ? 'default' : crop.priceTrend === 'Falling' ? 'destructive' : 'secondary'} className="ml-1">{crop.priceTrend}</Badge>
+                      </div>
+                      <div className="flex items-center">
+                         {getDemandIcon(crop.demandOutlook)}
+                         Demand: <Badge variant={getDemandOutlookBadgeVariant(crop.demandOutlook)} className="ml-1">{crop.demandOutlook}</Badge>
+                      </div>
+                      <div className="flex items-center">
+                         {getVolatilityIcon(crop.volatility)}
+                         Volatility: <Badge variant={getVolatilityBadgeVariant(crop.volatility)} className="ml-1">{crop.volatility}</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground pt-1"><span className="font-medium text-foreground">Rationale:</span> {crop.rationale}</p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+               !marketData.recommendedCrop && ( // Show this only if no crops and no recommendation either
+                <div className="text-center py-6">
+                    <Info className="h-12 w-12 text-primary mx-auto mb-3" />
+                    <p className="font-medium text-lg">No Specific Crop Trends Available</p>
+                    <p className="text-sm text-muted-foreground">
+                        The AI could not identify specific crop trends for this location.
+                    </p>
+                </div>
+               )
+            )}
+            
             {marketData.marketSummary && (
-                 <Card className="mt-4 p-4 bg-secondary/30 rounded-lg border">
+                 <Card className="mt-6 p-4 bg-secondary/30 rounded-lg border">
                     <CardHeader className="p-0 pb-2">
                         <CardTitle className="text-md font-semibold text-secondary-foreground flex items-center">
                             <Info className="h-5 w-5 mr-2 text-primary"/>
@@ -260,28 +306,7 @@ export default function MarketTrendsWidget({
                     </CardContent>
                  </Card>
             )}
-          </div>
-        ) : marketData && marketData.regionalCrops.length === 0 ? (
-            <div className="text-center py-6">
-                <Info className="h-12 w-12 text-primary mx-auto mb-3" />
-                <p className="font-medium text-lg">No Specific Crop Trends Available</p>
-                <p className="text-sm text-muted-foreground mb-3">
-                    The AI could not identify specific crop trends for this location.
-                </p>
-                {marketData.marketSummary && (
-                     <Card className="mt-4 p-3 bg-secondary/50 rounded-lg border text-left">
-                        <CardHeader className="p-0 pb-2">
-                            <CardTitle className="text-md font-semibold text-secondary-foreground flex items-center">
-                                <Info className="h-5 w-5 mr-2 text-primary"/>
-                                Regional Market Summary
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-0">
-                           <p className="text-sm text-muted-foreground">{marketData.marketSummary}</p>
-                        </CardContent>
-                     </Card>
-                )}
-            </div>
+          </>
         ) : (
           <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
             <BarChart3 className="h-8 w-8 mb-2" />
@@ -290,7 +315,7 @@ export default function MarketTrendsWidget({
         )}
       </CardContent>
        <CardFooter className="p-4 border-t">
-         <p className="text-xs text-muted-foreground">Market insights are AI-generated and for informational purposes only. Not financial advice.</p>
+         <p className="text-xs text-muted-foreground">Market insights and recommendations are AI-generated and for informational purposes only. Not financial advice.</p>
        </CardFooter>
     </Card>
   );
