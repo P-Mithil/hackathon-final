@@ -10,7 +10,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyAFIQ_-7cl0PfmIHIZ7t-uH8joEsf41nBU",
   authDomain: "agrivision-dashboard-baubn.firebaseapp.com",
   projectId: "agrivision-dashboard-baubn",
-  storageBucket: "agrivision-dashboard-baubn.firebasestorage.app", // Corrected based on user's image
+  storageBucket: "agrivision-dashboard-baubn.firebasestorage.app",
   messagingSenderId: "1095425003606",
   appId: "1:1095425003606:web:f2deedb52513eacb7e2bf7"
 };
