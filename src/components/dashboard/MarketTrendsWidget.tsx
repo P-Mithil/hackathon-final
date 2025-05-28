@@ -5,11 +5,18 @@ import React, { useState, useEffect, useTransition, useCallback } from "react";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, TrendingUp, TrendingDown, MinusSquare, DollarSign, BarChart3, LocateFixed, MapPin, Loader2, Info, Star, Package, SignalHigh, SignalMedium, SignalLow, Zap, ShieldCheck, ShieldAlert } from "lucide-react";
+import { AlertTriangle, TrendingUp, TrendingDown, MinusSquare, DollarSign, BarChart3, LocateFixed, MapPin, Loader2, Info, Star, Package, SignalHigh, SignalMedium, SignalLow, Zap, ShieldCheck, ShieldAlert, ShieldQuestion } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getMarketTrends, type GetMarketTrendsInput, type GetMarketTrendsOutput, type MarketCropTrendItem } from "@/ai/flows/getMarketTrendsFlow";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
+import { LineChart, Line, CartesianGrid, XAxis, YAxis } from "recharts";
 
 interface MarketTrendsWidgetProps {
   className?: string;
@@ -58,9 +65,9 @@ const getVolatilityIcon = (volatility: MarketCropTrendItem['volatility'] | undef
 
 const getDemandOutlookBadgeVariant = (outlook: MarketCropTrendItem['demandOutlook'] | undefined) => {
   switch (outlook) {
-    case 'Strong': return 'default'; // often primary color, can be styled to be green
-    case 'Moderate': return 'secondary'; // can be styled to be yellow
-    case 'Weak': return 'destructive'; // can be styled to be red
+    case 'Strong': return 'default';
+    case 'Moderate': return 'secondary';
+    case 'Weak': return 'destructive';
     default: return 'outline';
   }
 }
@@ -68,11 +75,33 @@ const getDemandOutlookBadgeVariant = (outlook: MarketCropTrendItem['demandOutloo
 const getVolatilityBadgeVariant = (volatility: MarketCropTrendItem['volatility'] | undefined) => {
    switch (volatility) {
     case 'High': return 'destructive';
-    case 'Medium': return 'default'; // using 'default' for medium, typically primary color
-    case 'Low': return 'secondary'; // using 'secondary' for low, often a lighter/muted color
+    case 'Medium': return 'default'; 
+    case 'Low': return 'secondary'; 
     default: return 'outline';
   }
 }
+
+const generateChartData = (trend: MarketCropTrendItem['priceTrend'] | undefined) => {
+  const basePoints = [{ x: 'Past' }, { x: 'Present' }, { x: 'Future' }];
+  switch (trend) {
+    case 'Rising':
+      return basePoints.map((p, i) => ({ ...p, value: 10 + i * 2 }));
+    case 'Falling':
+      return basePoints.map((p, i) => ({ ...p, value: 14 - i * 2 }));
+    case 'Stable':
+      return basePoints.map((p) => ({ ...p, value: 10 }));
+    default:
+      return basePoints.map((p) => ({ ...p, value: 0 })); // Or some other placeholder
+  }
+};
+
+const chartConfig = {
+  value: {
+    label: 'Trend',
+    color: 'hsl(var(--chart-1))',
+  },
+} satisfies ChartConfig;
+
 
 export default function MarketTrendsWidget({ 
   className,
@@ -251,38 +280,76 @@ export default function MarketTrendsWidget({
             {marketData.regionalCrops.length > 0 ? (
               <div className="space-y-4">
                 <h3 className="text-md font-semibold text-primary mb-2">Detailed Crop Insights:</h3>
-                {marketData.regionalCrops.map((crop, index) => (
-                  <Card key={index} className="p-4 bg-card border rounded-lg shadow-sm">
-                    <CardHeader className="p-0 pb-2">
-                       <CardTitle className="text-lg flex items-center">
-                         <Package className="h-5 w-5 mr-2 text-primary"/>
-                         {crop.cropName}
-                       </CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-0 space-y-2 text-sm">
-                      <div className="flex items-center">
-                        <DollarSign className="h-4 w-4 mr-2 text-muted-foreground" /> 
-                        Price: <span className="font-semibold ml-1">{crop.estimatedPrice}</span>
-                      </div>
-                      <div className="flex items-center">
-                        {getTrendIcon(crop.priceTrend)}
-                        Trend: <Badge variant={crop.priceTrend === 'Rising' ? 'default' : crop.priceTrend === 'Falling' ? 'destructive' : 'secondary'} className="ml-1">{crop.priceTrend}</Badge>
-                      </div>
-                      <div className="flex items-center">
-                         {getDemandIcon(crop.demandOutlook)}
-                         Demand: <Badge variant={getDemandOutlookBadgeVariant(crop.demandOutlook)} className="ml-1">{crop.demandOutlook}</Badge>
-                      </div>
-                      <div className="flex items-center">
-                         {getVolatilityIcon(crop.volatility)}
-                         Volatility: <Badge variant={getVolatilityBadgeVariant(crop.volatility)} className="ml-1">{crop.volatility}</Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground pt-1"><span className="font-medium text-foreground">Rationale:</span> {crop.rationale}</p>
-                    </CardContent>
-                  </Card>
-                ))}
+                {marketData.regionalCrops.map((crop, index) => {
+                  const trendChartData = generateChartData(crop.priceTrend);
+                  return (
+                    <Card key={index} className="p-4 bg-card border rounded-lg shadow-sm">
+                      <CardHeader className="p-0 pb-2 flex flex-row justify-between items-start">
+                         <CardTitle className="text-lg flex items-center">
+                           <Package className="h-5 w-5 mr-2 text-primary"/>
+                           {crop.cropName}
+                         </CardTitle>
+                         <Badge variant={crop.priceTrend === 'Rising' ? 'default' : crop.priceTrend === 'Falling' ? 'destructive' : 'secondary'} className="ml-1 shrink-0">
+                           {getTrendIcon(crop.priceTrend)}
+                           {crop.priceTrend}
+                         </Badge>
+                      </CardHeader>
+                      <CardContent className="p-0 space-y-2 text-sm">
+                        <div className="flex items-center">
+                          <DollarSign className="h-4 w-4 mr-2 text-muted-foreground" /> 
+                          Price: <span className="font-semibold ml-1">{crop.estimatedPrice}</span>
+                        </div>
+                        
+                        {trendChartData.some(d => d.value !== 0) && ( // Only show chart if there's a trend
+                          <div className="my-2 h-[50px]">
+                            <ChartContainer config={chartConfig} className="w-full h-full aspect-auto">
+                              <LineChart
+                                accessibilityLayer
+                                data={trendChartData}
+                                margin={{ top: 5, right: 5, left: -30, bottom: 0 }}
+                              >
+                                <CartesianGrid vertical={false} strokeDasharray="3 3" className="stroke-muted-foreground/30" />
+                                <XAxis
+                                  dataKey="x"
+                                  tickLine={false}
+                                  axisLine={false}
+                                  tickMargin={8}
+                                  tickFormatter={(value) => value.slice(0,3)}
+                                  className="text-xs fill-muted-foreground"
+                                />
+                                <YAxis hide domain={['dataMin - 2', 'dataMax + 2']} />
+                                <ChartTooltip
+                                  cursor={false}
+                                  content={<ChartTooltipContent hideLabel indicator="line" />}
+                                />
+                                <Line
+                                  dataKey="value"
+                                  type="monotone"
+                                  stroke="var(--color-value)"
+                                  strokeWidth={2}
+                                  dot={false}
+                                />
+                              </LineChart>
+                            </ChartContainer>
+                          </div>
+                        )}
+
+                        <div className="flex items-center">
+                           {getDemandIcon(crop.demandOutlook)}
+                           Demand: <Badge variant={getDemandOutlookBadgeVariant(crop.demandOutlook)} className="ml-1">{crop.demandOutlook}</Badge>
+                        </div>
+                        <div className="flex items-center">
+                           {getVolatilityIcon(crop.volatility)}
+                           Volatility: <Badge variant={getVolatilityBadgeVariant(crop.volatility)} className="ml-1">{crop.volatility}</Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground pt-1"><span className="font-medium text-foreground">Rationale:</span> {crop.rationale}</p>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             ) : (
-               !marketData.recommendedCrop && ( // Show this only if no crops and no recommendation either
+               !marketData.recommendedCrop && ( 
                 <div className="text-center py-6">
                     <Info className="h-12 w-12 text-primary mx-auto mb-3" />
                     <p className="font-medium text-lg">No Specific Crop Trends Available</p>
@@ -315,9 +382,10 @@ export default function MarketTrendsWidget({
         )}
       </CardContent>
        <CardFooter className="p-4 border-t">
-         <p className="text-xs text-muted-foreground">Market insights and recommendations are AI-generated and for informational purposes only. Not financial advice.</p>
+         <p className="text-xs text-muted-foreground">Market insights, recommendations and charts are AI-generated and for informational purposes only. Not financial advice.</p>
        </CardFooter>
     </Card>
   );
 }
 
+    
