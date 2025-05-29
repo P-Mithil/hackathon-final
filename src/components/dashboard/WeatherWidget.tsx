@@ -5,40 +5,42 @@ import React, { useState, useEffect, useTransition, useCallback } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Sun, Cloud, Thermometer, Wind, Droplets, Umbrella, Gauge, Loader2, AlertCircle, MapPin, LocateFixed } from "lucide-react";
+import { Sun, Cloud, Thermometer, Wind, Droplets, Umbrella, Gauge, Loader2, AlertCircle, MapPin, LocateFixed, CalendarDays, ArrowDownNarrowWide, ArrowUpNarrowWide } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getWeather, type GetWeatherInput, type WeatherAndForecastOutput } from "@/ai/flows/get-weather-flow";
-
+import { getWeather, type GetWeatherInput, type WeatherAndForecastOutput, type DailyForecastItem, type CurrentWeatherData } from "@/ai/flows/get-weather-flow";
 import { useToast } from "@/hooks/use-toast";
-
 import { useTranslation } from 'react-i18next';
+import { format, parseISO } from 'date-fns';
 
 interface WeatherWidgetProps {
   className?: string;
   initialLatitude?: number;
   initialLongitude?: number;
   onLocationChange?: (lat: number, lon: number) => void;
-  onWeatherFetched?: (weather: WeatherAndForecastOutput | null) => void;
+  onWeatherFetched?: (currentWeatherSummary: string | null) => void;
 }
 
-const getWeatherIcon = (weatherDescription: string | undefined, weatherCode?: number) => {
-  if (!weatherDescription && !weatherCode) return <Cloud className="h-7 w-7 text-accent" />;
+const getWeatherIcon = (weatherDescription: string | undefined, weatherCode?: number, isLarge: boolean = false) => {
+  const iconSize = isLarge ? "h-10 w-10" : "h-6 w-6";
+  if (!weatherDescription && !weatherCode) return <Cloud className={`${iconSize} text-accent`} />;
   const desc = weatherDescription?.toLowerCase();
   
-  if (desc?.includes("sun") || desc?.includes("clear")) return <Sun className="h-7 w-7 text-yellow-400" />;
-  if (desc?.includes("cloud") || desc?.includes("partly cloudy") || desc?.includes("mostly cloudy")) return <Cloud className="h-7 w-7 text-blue-400" />;
-  if (desc?.includes("rain") || desc?.includes("drizzle")) return <Umbrella className="h-7 w-7 text-blue-500" />;
-  if (desc?.includes("snow") || desc?.includes("flurries")) return <Cloud className="h-7 w-7 text-white" />; // Assuming dark theme for snow
-  if (desc?.includes("fog")) return <Cloud className="h-7 w-7 text-gray-400" />;
-  if (desc?.includes("thunderstorm")) return <Cloud className="h-7 w-7 text-purple-500" />; // Assuming a theme where purple stands out
-  return <Cloud className="h-7 w-7 text-gray-400" />;
+  if (desc?.includes("sun") || desc?.includes("clear")) return <Sun className={`${iconSize} text-yellow-400`} />;
+  if (desc?.includes("cloud") || desc?.includes("partly cloudy") || desc?.includes("mostly cloudy")) return <Cloud className={`${iconSize} text-blue-400`} />;
+  if (desc?.includes("rain") || desc?.includes("drizzle")) return <Umbrella className={`${iconSize} text-blue-500`} />;
+  if (desc?.includes("snow") || desc?.includes("flurries")) return <Cloud className={`${iconSize} text-white`} />; // Assuming dark theme for snow
+  if (desc?.includes("fog")) return <Cloud className={`${iconSize} text-gray-400`} />;
+  if (desc?.includes("thunderstorm")) return <Cloud className={`${iconSize} text-purple-500`} />;
+  return <Cloud className={`${iconSize} text-gray-400`} />;
 };
 
+const DEFAULT_LATITUDE = 34.0522; // Los Angeles
+const DEFAULT_LONGITUDE = -118.2437;
 
 export default function WeatherWidget({ 
   className, 
-  initialLatitude = 34.0522, 
-  initialLongitude = -118.2437,
+  initialLatitude = DEFAULT_LATITUDE, 
+  initialLongitude = DEFAULT_LONGITUDE,
   onLocationChange,
   onWeatherFetched,
 }: WeatherWidgetProps) {
@@ -66,7 +68,12 @@ export default function WeatherWidget({
         setInputLatitude(lat.toString());
         setInputLongitude(lon.toString());
         onLocationChange?.(lat, lon);
-        onWeatherFetched?.(response);
+        if (response && response.current && response.current.weatherDescription !== "Unavailable") {
+          const summary = `${response.current.weatherDescription}, Temp: ${response.current.temperature}°C, Humidity: ${response.current.humidity}%, Wind: ${response.current.windSpeed} km/h, Precip: ${response.current.precipitationProbability}%`;
+          onWeatherFetched?.(summary);
+        } else {
+          onWeatherFetched?.('Weather data currently unavailable for AI Advisor.');
+        }
       } catch (e) {
         const errorMessage = e instanceof Error ? e.message : "Failed to fetch weather data.";
         setError(errorMessage);
@@ -75,13 +82,9 @@ export default function WeatherWidget({
           description: errorMessage,
           variant: "destructive",
         });
-        const fallbackData: WeatherAndForecastOutput = {
-          temperature: 0, humidity: 0, windSpeed: 0, weatherCode: 0,
-          precipitationProbability: 0, uvIndex: 0, pressure: 0, weatherDescription: t('weatherUnavailable'),
-        };
-        setWeatherData(fallbackData);
+        setWeatherData(null); // Clear data on error
         onLocationChange?.(lat, lon);
-        onWeatherFetched?.(fallbackData);
+        onWeatherFetched?.(null);
       }
     });
   }, [toast, startTransition, onLocationChange, onWeatherFetched, t]);
@@ -122,7 +125,7 @@ export default function WeatherWidget({
           description: t('geolocationErrorToastDescription', { message }),
           variant: "destructive",
         });
-        fetchWeatherForLocation(initialLatitude, initialLongitude);
+        fetchWeatherForLocation(initialLatitude, initialLongitude); // Fallback to default
         setIsLocating(false);
       },
       { timeout: 10000 }
@@ -130,20 +133,28 @@ export default function WeatherWidget({
   }, [toast, fetchWeatherForLocation, initialLatitude, initialLongitude, t]);
 
   useEffect(() => {
-    tryAutoDetectLocation();
-    const intervalId = setInterval(() => {
-      fetchWeatherForLocation(currentLatitude, currentLongitude);
-    }, 30 * 60 * 1000); 
-    return () => clearInterval(intervalId);
+    if (onLocationChange) { // If used in a controlled way (e.g., dashboard page synchronizing locations)
+        fetchWeatherForLocation(initialLatitude, initialLongitude);
+    } else { // Standalone behavior
+        tryAutoDetectLocation();
+    }
+    // Removed the interval as it was causing issues with onLocationChange prop updates
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); 
 
 
   useEffect(() => {
-    setCurrentLatitude(initialLatitude);
-    setInputLatitude(initialLatitude.toString());
-    setCurrentLongitude(initialLongitude);
-    setInputLongitude(initialLongitude.toString());
+     if (currentLatitude !== initialLatitude || currentLongitude !== initialLongitude) {
+        setCurrentLatitude(initialLatitude);
+        setInputLatitude(initialLatitude.toString());
+        setCurrentLongitude(initialLongitude);
+        setInputLongitude(initialLongitude.toString());
+        // Only fetch if the component is supposed to manage its own location or if initial props changed
+        if (onLocationChange || (initialLatitude !== DEFAULT_LATITUDE || initialLongitude !== DEFAULT_LONGITUDE)){
+            fetchWeatherForLocation(initialLatitude, initialLongitude);
+        }
+     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialLatitude, initialLongitude]);
 
 
@@ -162,13 +173,15 @@ export default function WeatherWidget({
     fetchWeatherForLocation(lat, lon);
   };
   
-  const displayIcon = weatherData ? getWeatherIcon(weatherData.weatherDescription, weatherData.weatherCode) : <Loader2 className="h-7 w-7 text-accent animate-spin" />;
+  const currentWeatherData = weatherData?.current;
+  const forecastData = weatherData?.forecast;
+  const displayIcon = currentWeatherData ? getWeatherIcon(currentWeatherData.weatherDescription, currentWeatherData.weatherCode, true) : <Loader2 className="h-7 w-7 text-accent animate-spin" />;
 
   return (
     <Card className={cn("shadow-lg rounded-xl overflow-hidden flex flex-col", className)}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 bg-card hover:bg-muted/50 transition-colors">
         <CardTitle className="text-lg font-semibold text-card-foreground">{t('weatherWidgetTitle')}</CardTitle>
-        {(isPending || isLocating) && !weatherData ? <Loader2 className="h-7 w-7 text-accent animate-spin" /> : displayIcon}
+        {(isPending || isLocating) && !currentWeatherData ? <Loader2 className="h-7 w-7 text-accent animate-spin" /> : displayIcon}
       </CardHeader>
       <CardContent className="p-6 flex-grow">
         <div className="mb-4 space-y-2">
@@ -207,44 +220,79 @@ export default function WeatherWidget({
           </Button>
         </div>
 
-        {(isPending || isLocating) && !weatherData ? (
+        {(isPending || isLocating) && !currentWeatherData ? (
           <div className="flex flex-col items-center justify-center h-40">
             <Loader2 className="h-8 w-8 animate-spin text-primary mb-2" />
             <p className="text-muted-foreground">{isLocating ? t('gettingLocationLoading') : t('loadingWeatherDataLoading')}</p>
           </div>
-        ) : error && !weatherData?.weatherDescription ? (
+        ) : error && !currentWeatherData ? (
           <div className="flex flex-col items-center justify-center h-40 text-destructive">
             <AlertCircle className="h-8 w-8 mb-2" />
             <p className="font-semibold">{t('errorLoadingWeatherError')}</p>
             <p className="text-xs text-center">{error}</p>
           </div>
-        ) : weatherData ? (
+        ) : currentWeatherData ? (
           <>
-            <div className="text-4xl font-bold text-foreground">{weatherData.temperature}°C</div>
-            <p className="text-sm text-muted-foreground mt-1">{weatherData.weatherDescription === "Unavailable" ? t('weatherUnavailable') : weatherData.weatherDescription}</p>
-            <p className="text-xs text-muted-foreground">Lat: {currentLatitude.toFixed(4)}, Lon: {currentLongitude.toFixed(4)}</p>
+            <div className="text-4xl font-bold text-foreground">{currentWeatherData.temperature}°C</div>
+            <p className="text-sm text-muted-foreground mt-1">{currentWeatherData.weatherDescription === "Unavailable" ? t('weatherUnavailable') : currentWeatherData.weatherDescription}</p>
+            <p className="text-xs text-muted-foreground">Lat: {currentLatitude.toFixed(2)}, Lon: {currentLongitude.toFixed(2)}</p>
             <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-3">
               <div className="flex items-center text-sm">
                 <Droplets className="h-5 w-5 mr-2 text-muted-foreground" />
-                <span>{t('humidityLabel')} {weatherData.humidity}%</span>
+                <span>{t('humidityLabel')} {currentWeatherData.humidity}%</span>
               </div>
               <div className="flex items-center text-sm">
                 <Wind className="h-5 w-5 mr-2 text-muted-foreground" />
-                <span>{t('windLabel')} {weatherData.windSpeed} km/h</span>
+                <span>{t('windLabel')} {currentWeatherData.windSpeed} km/h</span>
               </div>
               <div className="flex items-center text-sm">
                 <Umbrella className="h-5 w-5 mr-2 text-muted-foreground" />
-                <span>{t('precipLabel')} {weatherData.precipitationProbability}%</span>
+                <span>{t('precipLabel')} {currentWeatherData.precipitationProbability}%</span>
               </div>
               <div className="flex items-center text-sm">
                 <Sun className="h-5 w-5 mr-2 text-muted-foreground" />
-                <span>{t('uvIndexLabel')} {weatherData.uvIndex}</span>
+                <span>{t('uvIndexLabel')} {currentWeatherData.uvIndex}</span>
               </div>
               <div className="flex items-center text-sm">
                 <Gauge className="h-5 w-5 mr-2 text-muted-foreground" />
-                <span>{t('pressureLabel')} {weatherData.pressure} hPa</span>
+                <span>{t('pressureLabel')} {currentWeatherData.pressure} hPa</span>
               </div>
             </div>
+
+            {forecastData && forecastData.length > 0 && (
+              <div className="mt-8">
+                <h3 className="text-md font-semibold mb-3 text-primary flex items-center">
+                  <CalendarDays className="h-5 w-5 mr-2" />
+                  {t('fiveDayForecastTitle')}
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                  {forecastData.slice(0, 5).map((day, index) => ( // Displaying up to 5 days
+                    <Card key={index} className="p-3 bg-card/70 shadow-sm rounded-lg text-center">
+                      <p className="text-sm font-medium text-muted-foreground">
+                        {format(parseISO(day.date), 'EEE')} 
+                      </p>
+                      <div className="my-2 flex justify-center">
+                        {getWeatherIcon(day.weatherDescription, day.weatherCode)}
+                      </div>
+                       <p className="text-xs text-muted-foreground whitespace-nowrap overflow-hidden text-ellipsis" title={day.weatherDescription}>
+                        {day.weatherDescription}
+                      </p>
+                      <div className="flex justify-center items-center gap-2 mt-1">
+                        <div className="flex items-center text-sm font-semibold text-foreground" title={t('maxTemp')}>
+                           <ArrowUpNarrowWide className="h-3 w-3 mr-1 text-red-500"/> {day.tempMax}°
+                        </div>
+                        <div className="flex items-center text-sm text-muted-foreground" title={t('minTemp')}>
+                           <ArrowDownNarrowWide className="h-3 w-3 mr-1 text-blue-500"/> {day.tempMin}°
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-center text-xs text-blue-600 mt-1">
+                        <Umbrella className="h-3 w-3 mr-1" /> {day.precipitationProbability}%
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            )}
           </>
         ) : (
            <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
