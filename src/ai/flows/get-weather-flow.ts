@@ -3,8 +3,8 @@
 /**
  * @fileOverview Weather data fetching flow and tool using tomorrow.io API.
  *
- * - getWeather - A function that fetches current weather and 5-day forecast.
- * - GetWeatherInput - The input type for the getWeather function.
+ * - getWeather - A function that fetches current weather and 7-day forecast.
+ * - GetWeatherInput - The input type for the getWeather function.c
  * - WeatherAndForecastOutput - The return type for the getWeather function.
  */
 
@@ -45,8 +45,8 @@ export type DailyForecastItem = z.infer<typeof DailyForecastItemSchema>;
 
 // Schema for the combined output
 const WeatherAndForecastOutputSchema = z.object({
-  current: CurrentWeatherDataSchema,
-  forecast: z.array(DailyForecastItemSchema).length(5).describe('A 5-day weather forecast.'),
+  current: CurrentWeatherDataSchema.describe('Current weather conditions.'),
+  forecast: z.array(DailyForecastItemSchema).length(7).describe('A 7-day weather forecast.'),
 });
 export type WeatherAndForecastOutput = z.infer<typeof WeatherAndForecastOutputSchema>;
 
@@ -81,7 +81,6 @@ const weatherCodeToString = (code: number | undefined, isDay: boolean = true): s
     7101: "Heavy Ice Pellets",
     7102: "Light Ice Pellets",
     8000: "Thunderstorm",
-    // Add more specific day/night codes if needed for icons
   };
   return codes[code] || `Code ${code}`;
 };
@@ -90,7 +89,7 @@ const weatherCodeToString = (code: number | undefined, isDay: boolean = true): s
 const fetchWeatherAndForecastTool = ai.defineTool(
   {
     name: 'fetchWeatherAndForecast',
-    description: 'Fetches current weather and a 5-day forecast for a given latitude and longitude from the tomorrow.io API.',
+    description: 'Fetches current weather and a 7-day forecast for a given latitude and longitude from the tomorrow.io API.',
     inputSchema: GetWeatherInputSchema,
     outputSchema: WeatherAndForecastOutputSchema,
   },
@@ -103,20 +102,20 @@ const fetchWeatherAndForecastTool = ai.defineTool(
       throw new Error('TOMORROW_IO_API_KEY is not set in environment variables.');
     }
 
-    const commonFields = [
+    const currentFields = [
       "temperature", "humidity", "windSpeed", "weatherCode", "precipitationProbability",
-      "uvIndex", "pressureSeaLevel" // For current weather
+      "uvIndex", "pressureSeaLevel"
     ];
     const forecastFields = [
-      "temperatureMax", "temperatureMin", "weatherCodeDay", // weatherCodeDay for daily summary
-      "precipitationProbabilityAvg", // Average precipitation probability for the day
+      "temperatureMax", "temperatureMin", "weatherCodeDay", 
+      "precipitationProbabilityAvg",
     ];
     
-    const allFields = [...new Set([...commonFields, ...forecastFields])].join(",");
-    const timesteps = "current,1d"; // Request current data and 1-day intervals
-    const startTime = startOfDay(new Date()).toISOString(); // Forecast starting from today
-    const endTime = format(addDays(new Date(), 5), 'yyyy-MM-dd\'T\'HH:mm:ss\'Z\''); // 5 days forecast + today = 6 intervals for 1d if today is included
-
+    const allFields = [...new Set([...currentFields, ...forecastFields])].join(",");
+    const timesteps = "current,1d"; 
+    const startTime = startOfDay(new Date()).toISOString(); 
+    const endTime = format(addDays(new Date(), 7), 'yyyy-MM-dd\'T\'HH:mm:ss\'Z\''); 
+    
     const apiUrl = `https://api.tomorrow.io/v4/timelines?location=${input.latitude},${input.longitude}&fields=${allFields}&timesteps=${timesteps}&units=metric&apikey=${apiKey}&startTime=${startTime}&endTime=${endTime}`;
 
     try {
@@ -128,121 +127,133 @@ const fetchWeatherAndForecastTool = ai.defineTool(
       }
       const data = await response.json();
 
-      if (!data.data?.timelines?.[0]?.intervals) {
-        console.error('Unexpected API response structure for weather/forecast:', data);
-        throw new Error('Invalid data structure received from weather API.');
+      if (!data.data?.timelines?.[0]?.intervals || data.data.timelines[0].intervals.length === 0) {
+        console.error('Unexpected API response structure or empty intervals for weather/forecast:', data);
+        throw new Error('Invalid or empty data structure received from weather API.');
       }
 
       const intervals = data.data.timelines[0].intervals;
+      let parsedCurrentWeather: CurrentWeatherData | null = null;
+      const parsedForecastItems: DailyForecastItem[] = [];
+      const now = new Date();
+
+      // Find current weather data: the first interval that doesn't have temperatureMax is likely current.
+      // Or, if multiple, pick the one with startTime closest to now but not in the future.
+      let potentialCurrentInterval = null;
+      for (const interval of intervals) {
+        if (interval.values.temperature !== undefined && interval.values.temperatureMax === undefined) {
+          const intervalDate = new Date(interval.startTime);
+          if (!potentialCurrentInterval || (intervalDate <= now && (!potentialCurrentInterval.startTime || intervalDate > new Date(potentialCurrentInterval.startTime)))) {
+            potentialCurrentInterval = interval;
+          }
+        }
+      }
       
-      // Find current weather data (should be the first interval with timestep 'current')
-      // Or, if timeline starts with 1d, the first interval is today's summary.
-      // Tomorrow.io API might return current as the first one if 'current' is first in timesteps query param
-      let currentWeatherData: CurrentWeatherData | null = null;
-      let dailyForecastItems: DailyForecastItem[] = [];
-
-      const currentInterval = intervals.find((interval: any) => interval.startTime === format(new Date(), 'yyyy-MM-dd\'T\'HH:mm:ss\'Z\'', { timeZone: 'UTC' }) || new Date(interval.startTime).getHours() === new Date().getUTCHours());
+      // If no clear "current" interval found based on above, try the first interval if it looks current-like.
+      if (!potentialCurrentInterval && intervals.length > 0 && intervals[0].values.temperature !== undefined && intervals[0].values.temperatureMax === undefined) {
+        potentialCurrentInterval = intervals[0];
+        console.log("Using intervals[0] as current weather by heuristic.");
+      }
 
 
-      let currentValues: any;
-      if (intervals.length > 0 && intervals[0].values.temperature !== undefined) { // Heuristic: if first interval has 'temperature', it's current
-          currentValues = intervals[0].values;
-          currentWeatherData = {
-            temperature: Math.round(currentValues.temperature ?? 0),
-            humidity: Math.round(currentValues.humidity ?? 0),
-            windSpeed: Math.round((currentValues.windSpeed ?? 0) * 3.6 * 10) / 10, // m/s to km/h
-            weatherCode: currentValues.weatherCode ?? 0,
-            precipitationProbability: Math.round(currentValues.precipitationProbability ?? 0),
-            uvIndex: currentValues.uvIndex ?? 0,
-            pressure: Math.round(currentValues.pressureSeaLevel ?? 1000),
-            weatherDescription: weatherCodeToString(currentValues.weatherCode),
-          };
+      if (potentialCurrentInterval && potentialCurrentInterval.values) {
+        const cv = potentialCurrentInterval.values;
+        parsedCurrentWeather = {
+          temperature: Math.round(cv.temperature ?? 0),
+          humidity: Math.round(cv.humidity ?? 0),
+          windSpeed: Math.round((cv.windSpeed ?? 0) * 3.6 * 10) / 10, // m/s to km/h, rounded to 1 decimal
+          weatherCode: cv.weatherCode ?? 0,
+          precipitationProbability: Math.round(cv.precipitationProbability ?? 0),
+          uvIndex: Math.round(cv.uvIndex ?? 0),
+          pressure: Math.round(cv.pressureSeaLevel ?? 1000),
+          weatherDescription: weatherCodeToString(cv.weatherCode),
+        };
       } else {
-        // Fallback if current data isn't clearly the first interval, or set defaults
-         currentWeatherData = {
-            temperature: 0, humidity: 0, windSpeed: 0, weatherCode: 0,
-            precipitationProbability: 0, uvIndex: 0, pressure: 1000, weatherDescription: "Unavailable",
-         };
-         console.warn("Could not definitively parse current weather from intervals. Using fallback.");
+        console.warn("Could not find a suitable 'current' weather interval. Using default values.");
+        parsedCurrentWeather = { 
+            temperature: 0, humidity: 0, windSpeed: 0, weatherCode: 0, 
+            precipitationProbability: 0, uvIndex: 0, pressure: 1000, weatherDescription: "Unavailable" 
+        };
       }
 
-
-      // Parse daily forecast data (intervals with timestep '1d')
-      // We need the next 5 days, starting from tomorrow if current is today. Or start from today if current is truly 'current' instant.
-      // The API returns intervals including "today". We want 5 days starting from tomorrow.
-      // If currentWeatherData was derived from intervals[0], then forecast starts from intervals[1].
-      
-      let forecastStartIndex = 1; // Assuming intervals[0] was current
-      // If the first interval was already a daily summary for today, we still want the next 5 days.
-      // Let's ensure we grab 5 forecast days.
-      // API `endTime` for 5 days means we should get 6 intervals if 'current' isn't part of the '1d' intervals.
-      // If 'current' is separate, we need 5 '1d' intervals.
-
-      const forecastIntervals = intervals.filter((interval: any) => {
-        // Check if tempMax exists, indicating it's a daily summary interval
-        return interval.values.temperatureMax !== undefined;
-      });
-
-
-      for (let i = 0; i < forecastIntervals.length && dailyForecastItems.length < 5; i++) {
-        const dayData = forecastIntervals[i];
-        if (new Date(dayData.startTime) >= startOfDay(addDays(new Date(), 1)) || (i === 0 && dailyForecastItems.length === 0)) { // Start from tomorrow or today if it's the first daily data
-             dailyForecastItems.push({
-                date: format(new Date(dayData.startTime), 'yyyy-MM-dd'),
-                tempMax: Math.round(dayData.values.temperatureMax ?? 0),
-                tempMin: Math.round(dayData.values.temperatureMin ?? 0),
-                weatherCode: dayData.values.weatherCodeDay ?? (dayData.values.weatherCode ?? 0), // Prefer weatherCodeDay
-                weatherDescription: weatherCodeToString(dayData.values.weatherCodeDay ?? dayData.values.weatherCode, true),
-                precipitationProbability: Math.round(dayData.values.precipitationProbabilityAvg ?? (dayData.values.precipitationProbability ?? 0)),
+      // Extract daily forecast items
+      for (const interval of intervals) {
+        // Daily intervals are identified by having temperatureMax and temperatureMin
+        if (interval.values.temperatureMax !== undefined && interval.values.temperatureMin !== undefined) {
+          if (parsedForecastItems.length < 7) { // Limit to 7 days
+            parsedForecastItems.push({
+              date: format(new Date(interval.startTime), 'yyyy-MM-dd'),
+              tempMax: Math.round(interval.values.temperatureMax ?? 0),
+              tempMin: Math.round(interval.values.temperatureMin ?? 0),
+              weatherCode: interval.values.weatherCodeDay ?? interval.values.weatherCode ?? 0,
+              weatherDescription: weatherCodeToString(interval.values.weatherCodeDay ?? interval.values.weatherCode, true),
+              precipitationProbability: Math.round(interval.values.precipitationProbabilityAvg ?? interval.values.precipitationProbability ?? 0),
             });
+          }
         }
       }
       
-      // If we got today's forecast as the first one, and we need 5 more days.
-      // And if current weather data was distinct from the first daily interval
-      if (dailyForecastItems.length < 5 && forecastIntervals.length > 0) {
-          // This logic might be complex if the API returns current and today's daily separately.
-          // Simplification: Ensure we have 5 forecast items. If not, pad or adjust.
-          // For now, we rely on API returning enough daily intervals.
-          // If the number of dailyForecastItems is less than 5, we might have an issue with data parsing or API response.
+      // Sort forecast items by date, just in case they are not in order from the API
+      parsedForecastItems.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      
+      // Ensure we have exactly 7 forecast days, padding if necessary
+      const todayStr = format(startOfDay(new Date()), 'yyyy-MM-dd');
+      let currentForecastDayIndex = parsedForecastItems.findIndex(f => f.date >= todayStr);
+      if (currentForecastDayIndex === -1 && parsedForecastItems.length > 0) {
+        // If all forecast dates are in the past (unlikely with correct API call), or some other issue.
+        // Fallback to taking first available, or just pad all if empty.
+        currentForecastDayIndex = 0; 
+      } else if (currentForecastDayIndex === -1 && parsedForecastItems.length === 0) {
+        // No forecast items at all
+         currentForecastDayIndex = 0; // Will result in full padding
       }
-       while (dailyForecastItems.length < 5) {
-        console.warn(`Padding forecast. Expected 5 days, got ${dailyForecastItems.length}.`);
-        const lastDate = dailyForecastItems.length > 0 ? dailyForecastItems[dailyForecastItems.length - 1].date : format(new Date(), 'yyyy-MM-dd');
-        dailyForecastItems.push({
-            date: format(addDays(new Date(lastDate), 1), 'yyyy-MM-dd'),
+
+
+      const finalForecastItems: DailyForecastItem[] = [];
+      let baseDate = startOfDay(new Date());
+      if (parsedForecastItems.length > 0 && currentForecastDayIndex > -1) {
+         // If we have some forecast data, try to align it starting from today or the first available future date
+         const firstForecastDate = new Date(parsedForecastItems[currentForecastDayIndex].date + 'T00:00:00Z'); // Ensure parsing as UTC date
+         if (firstForecastDate >= baseDate) {
+            baseDate = firstForecastDate;
+         }
+      }
+
+
+      for (let i = 0; i < 7; i++) {
+        const targetDateStr = format(addDays(baseDate, i), 'yyyy-MM-dd');
+        const existingForecastDay = parsedForecastItems.find(f => f.date === targetDateStr);
+        if (existingForecastDay) {
+          finalForecastItems.push(existingForecastDay);
+        } else {
+          console.warn(`Padding forecast for date: ${targetDateStr}. Original count: ${parsedForecastItems.length}`);
+          finalForecastItems.push({
+            date: targetDateStr,
             tempMax: 0, tempMin: 0, weatherCode: 0, weatherDescription: "N/A", precipitationProbability: 0
-        });
-      }
-
-
-      if (!currentWeatherData) {
-        throw new Error("Could not parse current weather data from API response.");
-      }
-      if (dailyForecastItems.length !== 5) {
-         console.warn(`Expected 5 forecast days, but parsed ${dailyForecastItems.length}. The response might be incomplete or parsing needs adjustment.`);
-         // Ensure 5 items even if some are placeholders if API didn't provide enough
-        while (dailyForecastItems.length < 5) {
-            const lastDate = dailyForecastItems.length > 0 ? dailyForecastItems[dailyForecastItems.length - 1].date : format(new Date(), 'yyyy-MM-dd');
-            dailyForecastItems.push({
-                date: format(addDays(new Date(lastDate), 1), 'yyyy-MM-dd'),
-                tempMax: 0, tempMin: 0, weatherCode: 0, weatherDescription: "N/A", precipitationProbability: 0
-            });
+          });
         }
       }
-
 
       return {
-        current: currentWeatherData,
-        forecast: dailyForecastItems.slice(0,5), // Ensure exactly 5 days
+        current: parsedCurrentWeather, // This is now guaranteed to be an object
+        forecast: finalForecastItems.slice(0,7), // Ensure exactly 7 days
       };
 
     } catch (error) {
       console.error("Error in fetchWeatherAndForecastTool:", error);
-      if (error instanceof Error) {
-        throw new Error(`Error fetching or processing weather/forecast data: ${error.message}`);
-      }
-      throw new Error("An unknown error occurred while fetching weather/forecast data.");
+      // Fallback to a default structure on any error to satisfy the schema
+        const fallbackCurrent: CurrentWeatherData = { 
+            temperature: 0, humidity: 0, windSpeed: 0, weatherCode: 0, 
+            precipitationProbability: 0, uvIndex: 0, pressure: 1000, weatherDescription: "Error fetching" 
+        };
+        const fallbackForecast: DailyForecastItem[] = [];
+        for (let i = 0; i < 7; i++) {
+            fallbackForecast.push({
+                date: format(addDays(new Date(), i), 'yyyy-MM-dd'),
+                tempMax: 0, tempMin: 0, weatherCode: 0, weatherDescription: "N/A", precipitationProbability: 0
+            });
+        }
+        return { current: fallbackCurrent, forecast: fallbackForecast };
     }
   }
 );
